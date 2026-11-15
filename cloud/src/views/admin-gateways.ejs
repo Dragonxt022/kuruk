@@ -72,9 +72,12 @@
                   <span class="pill off">Não configurado</span>
                 <% } %>
                 <% if (gateway.accessTokenSet) { %>
-                  <span class="pill <%= gateway.environment === 'producao' ? 'on' : 'off' %>">
-                    <%= gateway.environment === 'producao' ? 'Produção' : (gateway.environment === 'teste' ? 'Teste' : 'Ambiente desconhecido') %>
+                  <span class="pill <%= gateway.selectedEnvironment === 'producao' ? 'on' : 'off' %>">
+                    <%= gateway.selectedEnvironment === 'producao' ? 'Produção' : 'Testes' %>
                   </span>
+                  <% if (gateway.environment !== 'desconhecido' && gateway.environment !== gateway.selectedEnvironment) { %>
+                    <span class="pill warn">Credencial de <%= gateway.environment === 'teste' ? 'teste' : 'produção' %></span>
+                  <% } %>
                   <% if (gateway.accountEmail) { %><span class="pill off"><%= gateway.accountEmail %></span><% } %>
                 <% } %>
               </div>

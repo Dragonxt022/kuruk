@@ -3,8 +3,9 @@ import { getPool } from '../db';
 import { requireAdminAuth } from '../adminAuth';
 import {
   GatewayError, createBoletoPayment, createCardPreference, createPixPayment,
-  friendlyGatewayMessage, getPayment, isConfigured, loadSettings, loadSettingsForView,
-  mapPaymentStatus, publicPayUrl, saveSettings,
+  forgetGatewayAccount, friendlyGatewayMessage, getGatewayAccount, getPayment, isConfigured,
+  loadSettings, loadSettingsForView, mapPaymentStatus, normalizeEnvironment, publicPayUrl,
+  saveEnvironmentSettings, setActiveEnvironment, setGatewayEnabled,
 } from '../gateway';
 import {
   ensurePublicToken, getCharge, saveGatewayResult, savePaymentSnapshot, settleCharge,
@@ -51,26 +52,76 @@ router.get('/payments', requireAdminAuth, async (req, res) => {
   });
 });
 
+/** Salva as credenciais do ambiente escolhido no formulário (teste OU produção). */
 router.post('/payments', requireAdminAuth, async (req, res) => {
-  const b = (req.body ?? {}) as Record<string, unknown>;
-  await saveSettings(b);
-  res.redirect('/admin/payments?ok=' + encodeURIComponent('Configurações de pagamento salvas.'));
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const environment = normalizeEnvironment(body.environment);
+  await saveEnvironmentSettings(environment, body);
+  // Compatibilidade com o formulário antigo (e com integrações): quando `enabled` vem
+  // junto, ele também vale. A tela nova usa o toggle separado em /payments/enable.
+  if (body.enabled !== undefined) {
+    await setGatewayEnabled(body.enabled === true || body.enabled === '1' || body.enabled === 'on');
+  }
+  const label = environment === 'teste' ? 'teste' : 'produção';
+  res.redirect('/admin/payments?ok=' + encodeURIComponent(`Credenciais de ${label} salvas.`));
+});
+
+/** Troca o ambiente ativo com um clique. Não deixa ativar um ambiente sem Access Token. */
+router.post('/payments/environment', requireAdminAuth, async (req, res) => {
+  const environment = normalizeEnvironment((req.body ?? {}).environment);
+  const ok = await setActiveEnvironment(environment);
+  if (!ok) {
+    const label = environment === 'teste' ? 'teste' : 'produção';
+    res.redirect('/admin/payments?error=' + encodeURIComponent(
+      `Salve o Access Token de ${label} antes de ativar este ambiente.`,
+    ));
+    return;
+  }
+  const msg = environment === 'teste'
+    ? 'Ambiente de testes ativado. Nenhum valor real será cobrado.'
+    : 'Ambiente de produção ativado. As cobranças voltam a valer dinheiro real.';
+  res.redirect('/admin/payments?ok=' + encodeURIComponent(msg));
 });
 
 /**
- * Liga/desliga o pagamento online sem tocar nas credenciais. Existe porque salvar o token
- * e a chave do webhook com a caixa desmarcada deixava o admin achando que nada tinha sido
- * salvo — as credenciais estavam lá, mas o gateway seguia desligado.
+ * Liga/desliga o pagamento online sem tocar nas credenciais de nenhum ambiente.
  */
 router.post('/payments/enable', requireAdminAuth, async (req, res) => {
-  const enabled = String((req.body ?? {}).enabled) === '1' ? '1' : '0';
-  await getPool().query(
-    `INSERT INTO app_settings (setting_key, setting_value) VALUES ('mp_enabled', ?)
-     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
-    [enabled],
-  );
-  const msg = enabled === '1' ? 'Pagamento online ativado.' : 'Pagamento online desligado.';
+  const enabled = String((req.body ?? {}).enabled) === '1';
+  await setGatewayEnabled(enabled);
+  const msg = enabled ? 'Pagamento online ativado.' : 'Pagamento online desligado.';
   res.redirect('/admin/payments?ok=' + encodeURIComponent(msg));
+});
+
+/** "Testar conexão": bate no /users/me com a credencial do ambiente e mostra a conta. */
+router.post('/payments/test', requireAdminAuth, async (req, res) => {
+  const environment = normalizeEnvironment((req.body ?? {}).environment);
+  const label = environment === 'teste' ? 'teste' : 'produção';
+  const settings = await loadSettings();
+  if (settings.environment !== environment) {
+    res.redirect('/admin/payments?error=' + encodeURIComponent(
+      `Ative o ambiente de ${label} para testar esta credencial.`,
+    ));
+    return;
+  }
+  if (!settings.accessToken) {
+    res.redirect('/admin/payments?error=' + encodeURIComponent(`Salve o Access Token de ${label} antes de testar.`));
+    return;
+  }
+  forgetGatewayAccount(settings.accessToken);
+  const account = await getGatewayAccount(settings);
+  if (!account) {
+    res.redirect('/admin/payments?error=' + encodeURIComponent(
+      `Não foi possível conectar com a credencial de ${label}. Confira o Access Token no painel do Mercado Pago.`,
+    ));
+    return;
+  }
+  const tipo = account.isTest ? 'teste' : 'produção';
+  const aviso = (environment === 'teste') !== account.isTest
+    ? ` Atenção: esta credencial parece ser de ${tipo}.`
+    : '';
+  const conta = account.email || account.nickname || account.id;
+  res.redirect('/admin/payments?ok=' + encodeURIComponent(`Conectado à conta ${conta} (${tipo}).${aviso}`));
 });
 
 // ─────────────────────── Pagamento de uma cobrança ───────────────────────

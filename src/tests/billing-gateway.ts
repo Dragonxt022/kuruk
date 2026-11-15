@@ -289,8 +289,8 @@ async function main(): Promise<void> {
     check('salvar credenciais do gateway', salvar.status === 302, String(salvar.status));
 
     const paginaPagamentos = await (await api('/admin/payments', {}, admin)).text();
-    check('painel mostra o gateway ligado', paginaPagamentos.includes('Pagamento online ligado'));
-    check('painel mostra o tutorial', paginaPagamentos.includes('Como conseguir a chave') && paginaPagamentos.includes('Suas integrações'));
+    check('painel mostra o gateway ligado', paginaPagamentos.includes('Pagamento online') && paginaPagamentos.includes('Ligado'));
+    check('painel mostra o tutorial', paginaPagamentos.includes('Como conseguir cada credencial') && paginaPagamentos.includes('Suas integrações'));
     check('painel mostra a URL do webhook para colar no Mercado Pago',
       paginaPagamentos.includes(`${CLOUD_URL}/api/webhooks/mercadopago`));
 

@@ -802,6 +802,19 @@
     .payer-env-icon svg { width: 16px; height: 16px; }
     .payer-env strong { display: block; font-size: .8rem; }
     .payer-env span { color: var(--text-muted); }
+    .pay-howto {
+      display: grid;
+      gap: .45rem;
+      margin: .75rem 0 0;
+      padding: .7rem .8rem;
+      border: 1px solid var(--border-light);
+      border-radius: 11px;
+      background: var(--surface-hover);
+    }
+    .pay-howto > div { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: .5rem; align-items: baseline; }
+    .pay-howto strong { font-size: .78rem; color: var(--text); }
+    .pay-howto span { font-size: .76rem; color: var(--text-muted); line-height: 1.45; }
+    @media (max-width: 520px) { .pay-howto > div { grid-template-columns: 1fr; gap: .1rem; } }
     .plan-option { position: relative; }
     .plan-option.active::after {
       content: '✓';
@@ -1120,26 +1133,26 @@
                data-lpignore="true" data-1p-ignore="true"
                :placeholder="subGateway && subGateway.environment === 'teste' ? 'test_user_...@testuser.com' : 'seu@email.com'" />
         <p class="error" x-show="payerEmailError()" x-text="payerEmailError()"></p>
-        <p class="sub-note">
-          <strong>Pix:</strong> o cliente não precisa de conta no Mercado Pago — ele paga pelo app de
-          qualquer banco usando o QR Code ou o copia e cola.
-          <strong>Assinatura no cartão:</strong> use o e-mail da conta Mercado Pago que vai autorizar
-          a recorrência.
-        </p>
-        <p class="sub-note">
-          <strong>Pix é pagamento único de 30 dias</strong>, sem débito automático. Para cobrança
-          recorrente no cartão, use <strong>Assinar agora</strong>.
-        </p>
+        <div class="pay-howto">
+          <div>
+            <strong>Pix</strong>
+            <span>Pagamento único de 30 dias. O cliente paga pelo app de qualquer banco e não precisa de conta no Mercado Pago.</span>
+          </div>
+          <div>
+            <strong>Cartão</strong>
+            <span>Assinatura automática, cobrada todo mês. Use o e-mail da conta Mercado Pago que vai autorizar a recorrência.</span>
+          </div>
+        </div>
         <p class="error" x-text="subError"></p>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn secondary" @click="$refs.plansDlg.close()">Agora não</button>
         <button type="button" class="btn secondary" @click="buyUpfront()" :disabled="subBusy || !canSubmitPlan()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h3"/></svg>
-          <span x-text="subBusy ? 'Gerando Pix…' : 'Pagar à vista com Pix'"></span>
+          <span x-text="subBusy ? 'Gerando Pix…' : 'Pagar 30 dias com Pix'"></span>
         </button>
         <button type="button" class="btn" @click="subscribe()" :disabled="subBusy || !canSubmitPlan()">
-          <span x-text="subBusy ? 'Gerando…' : 'Assinar agora'"></span>
+          <span x-text="subBusy ? 'Gerando…' : 'Assinar no cartão'"></span>
         </button>
       </div>
     </dialog>
@@ -1465,12 +1478,12 @@
             return 'O Mercado Pago ainda não está configurado na nuvem. Fale com o suporte antes de assinar.';
           }
           if (this.subGateway.environment === 'teste') {
-            return 'Ambiente de teste: use um comprador de teste da sua conta. No painel do Mercado Pago (Contas de teste), copie o campo "Usuário" — TESTUSER123456 vira test_user_123456@testuser.com.';
+            return 'Modo de teste: use o e-mail de um comprador de teste da sua conta. Nada será cobrado de verdade.';
           }
           if (this.subGateway.environment === 'producao') {
-            return 'Para Pix, use o e-mail do cliente — ele não precisa de conta no Mercado Pago. Para a assinatura no cartão, use o e-mail da conta Mercado Pago que vai autorizar.';
+            return 'Pagamento real. No Pix, use o e-mail do cliente; no cartão, o e-mail da conta Mercado Pago que vai autorizar.';
           }
-          return 'Para Pix, use o e-mail do cliente. Para a assinatura no cartão, use o e-mail da conta Mercado Pago que vai autorizar.';
+          return 'No Pix, use o e-mail do cliente. No cartão, o e-mail da conta Mercado Pago que vai autorizar.';
         },
         /** A assinatura existente foi criada com um e-mail do ambiente errado. */
         payerEmailProblem() {

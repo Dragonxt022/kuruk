@@ -24,27 +24,57 @@ const KEY_TOKEN = 'mp_access_token';
 const KEY_SECRET = 'mp_webhook_secret';
 const KEY_EMAIL = 'mp_payer_email';
 const KEY_ENABLED = 'mp_enabled';
+const KEY_ENVIRONMENT = 'mp_environment';
+
+export type GatewayEnvironment = 'teste' | 'producao';
+
+/** Chaves por ambiente. Teste e produção ficam salvos ao mesmo tempo; só um fica ativo. */
+const tokenKey = (env: GatewayEnvironment) => `mp_access_token_${env}`;
+const secretKey = (env: GatewayEnvironment) => `mp_webhook_secret_${env}`;
+const emailKey = (env: GatewayEnvironment) => `mp_payer_email_${env}`;
+
+export function normalizeEnvironment(value: unknown): GatewayEnvironment {
+  return String(value ?? '').trim().toLowerCase() === 'teste' ? 'teste' : 'producao';
+}
 
 export interface GatewaySettings {
   enabled: boolean;
+  environment: GatewayEnvironment;
   accessToken: string;
   webhookSecret: string;
   /** E-mail do pagador usado quando a cobrança não tem um (o Pix exige e-mail). */
   payerEmail: string;
 }
 
-/** O que a tela pode saber: segredo nunca volta, só o sinal de que existe. */
-export interface GatewaySettingsView {
-  enabled: boolean;
+export interface GatewayEnvironmentView {
+  environment: GatewayEnvironment;
+  active: boolean;
   accessTokenSet: boolean;
   accessTokenPreview: string;
   webhookSecretSet: boolean;
   payerEmail: string;
+  accountEmail: string | null;
+  accountNickname: string | null;
+  /** O que o prefixo do token sugere (pode divergir da conta em credenciais de Assinaturas). */
+  detectedEnvironment: 'teste' | 'producao' | 'desconhecido';
+}
+
+/** O que a tela pode saber: segredo nunca volta, só o sinal de que existe. */
+export interface GatewaySettingsView {
+  enabled: boolean;
+  /** Ambiente real da credencial ativa (o que importa para validar e-mail e webhook). */
   environment: 'teste' | 'producao' | 'desconhecido';
+  /** Ambiente escolhido no painel (pode divergir se a credencial for da outra conta). */
+  selectedEnvironment: GatewayEnvironment;
+  accessTokenSet: boolean;
+  accessTokenPreview: string;
+  webhookSecretSet: boolean;
+  payerEmail: string;
   accountEmail: string | null;
   accountNickname: string | null;
   apiBase: string;
   notificationUrl: string;
+  environments: GatewayEnvironmentView[];
 }
 
 export class GatewayError extends Error {
@@ -82,10 +112,15 @@ export function friendlyGatewayMessage(error: unknown): string {
 }
 
 async function readSettings(): Promise<Record<string, string>> {
+  const keys = [
+    KEY_TOKEN, KEY_SECRET, KEY_EMAIL, KEY_ENABLED, KEY_ENVIRONMENT,
+    tokenKey('teste'), secretKey('teste'), emailKey('teste'),
+    tokenKey('producao'), secretKey('producao'), emailKey('producao'),
+  ];
   const [rows] = await getPool().query(
     `SELECT setting_key, setting_value FROM app_settings
-      WHERE setting_key IN (?, ?, ?, ?)`,
-    [KEY_TOKEN, KEY_SECRET, KEY_EMAIL, KEY_ENABLED],
+      WHERE setting_key IN (${keys.map(() => '?').join(',')})`,
+    keys,
   );
   const out: Record<string, string> = {};
   for (const r of rows as { setting_key: string; setting_value: string | null }[]) {
@@ -94,13 +129,30 @@ async function readSettings(): Promise<Record<string, string>> {
   return out;
 }
 
+/**
+ * Credenciais de UM ambiente. As chaves antigas (`mp_access_token`, sem sufixo) valem
+ * como produção: instalações anteriores à separação dos ambientes continuam funcionando
+ * sem reconfigurar nada.
+ */
+function credentialsFor(s: Record<string, string>, env: GatewayEnvironment) {
+  const legacy = env === 'producao';
+  return {
+    accessToken: s[tokenKey(env)] || (legacy ? s[KEY_TOKEN] ?? '' : ''),
+    webhookSecret: s[secretKey(env)] || (legacy ? s[KEY_SECRET] ?? '' : ''),
+    payerEmail: s[emailKey(env)] || (legacy ? s[KEY_EMAIL] ?? '' : ''),
+  };
+}
+
 export async function loadSettings(): Promise<GatewaySettings> {
   const s = await readSettings();
+  const environment = normalizeEnvironment(s[KEY_ENVIRONMENT]);
+  const creds = credentialsFor(s, environment);
   return {
     enabled: s[KEY_ENABLED] === '1',
-    accessToken: s[KEY_TOKEN] ?? '',
-    webhookSecret: s[KEY_SECRET] ?? '',
-    payerEmail: s[KEY_EMAIL] ?? '',
+    environment,
+    accessToken: creds.accessToken,
+    webhookSecret: creds.webhookSecret,
+    payerEmail: creds.payerEmail,
   };
 }
 
@@ -111,41 +163,98 @@ export function tokenEnvironment(token: string): 'teste' | 'producao' | 'desconh
   return 'desconhecido';
 }
 
+function previewToken(token: string): string {
+  return token ? `${token.slice(0, 8)}…${token.slice(-4)}` : '';
+}
+
 export async function loadSettingsForView(): Promise<GatewaySettingsView> {
-  const s = await loadSettings();
-  // O prefixo do token não distingue teste de produção em Assinaturas (token de teste pode
-  // começar com APP_USR). O `/users/me` diz a verdade; se a consulta falhar, cai no prefixo.
-  const account = s.accessToken ? await getGatewayAccount(s) : null;
+  const raw = await readSettings();
+  const environment = normalizeEnvironment(raw[KEY_ENVIRONMENT]);
+
+  const build = async (env: GatewayEnvironment): Promise<GatewayEnvironmentView> => {
+    const creds = credentialsFor(raw, env);
+    const account = creds.accessToken
+      ? await getGatewayAccount({ enabled: false, environment: env, ...creds })
+      : null;
+    return {
+      environment: env,
+      active: env === environment,
+      accessTokenSet: Boolean(creds.accessToken),
+      accessTokenPreview: previewToken(creds.accessToken),
+      webhookSecretSet: Boolean(creds.webhookSecret),
+      payerEmail: creds.payerEmail,
+      accountEmail: account?.email ?? null,
+      accountNickname: account?.nickname ?? null,
+      detectedEnvironment: account
+        ? (account.isTest ? 'teste' : 'producao')
+        : tokenEnvironment(creds.accessToken),
+    };
+  };
+
+  const environments = await Promise.all([build('producao'), build('teste')]);
+  const active = environments.find((e) => e.active)!;
+
   return {
-    enabled: s.enabled,
-    accessTokenSet: Boolean(s.accessToken),
-    accessTokenPreview: s.accessToken ? `${s.accessToken.slice(0, 8)}…${s.accessToken.slice(-4)}` : '',
-    webhookSecretSet: Boolean(s.webhookSecret),
-    payerEmail: s.payerEmail,
-    environment: account ? (account.isTest ? 'teste' : 'producao') : tokenEnvironment(s.accessToken),
-    accountEmail: account?.email ?? null,
-    accountNickname: account?.nickname ?? null,
+    enabled: raw[KEY_ENABLED] === '1',
+    environment: active.detectedEnvironment,
+    selectedEnvironment: environment,
+    accessTokenSet: active.accessTokenSet,
+    accessTokenPreview: active.accessTokenPreview,
+    webhookSecretSet: active.webhookSecretSet,
+    payerEmail: active.payerEmail,
+    accountEmail: active.accountEmail,
+    accountNickname: active.accountNickname,
     apiBase: MP_API_BASE,
     notificationUrl: notificationUrl(),
+    environments,
   };
 }
 
 /**
- * Salva o que veio da tela. Campo de segredo em branco MANTÉM o que já estava salvo — é o
- * mesmo contrato da senha de SMTP (`admin.ts`), para o admin não apagar a chave sem querer.
+ * Salva as credenciais de um ambiente sem mexer no outro. Campo de segredo em branco
+ * MANTÉM o que já estava salvo — é o mesmo contrato da senha de SMTP (`admin.ts`), para o
+ * admin não apagar a chave sem querer. O e-mail, por ser um dado visível, pode ser limpo.
  */
-export async function saveSettings(body: Record<string, unknown>): Promise<void> {
+export async function saveEnvironmentSettings(
+  environment: GatewayEnvironment,
+  body: Record<string, unknown>,
+): Promise<void> {
   const upsert = (key: string, value: string | null) =>
     getPool().query(
       'INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
       [key, value],
     );
-  await upsert(KEY_ENABLED, body.enabled ? '1' : '0');
-  await upsert(KEY_EMAIL, String(body.payerEmail ?? '').trim() || null);
   const token = String(body.accessToken ?? '').trim();
-  if (token) await upsert(KEY_TOKEN, token);
+  if (token) await upsert(tokenKey(environment), token);
   const secret = String(body.webhookSecret ?? '').trim();
-  if (secret) await upsert(KEY_SECRET, secret);
+  if (secret) await upsert(secretKey(environment), secret);
+  await upsert(emailKey(environment), String(body.payerEmail ?? '').trim() || null);
+}
+
+/** Troca o ambiente ativo. Só permite ativar um ambiente que já tenha Access Token. */
+export async function setActiveEnvironment(environment: GatewayEnvironment): Promise<boolean> {
+  const raw = await readSettings();
+  const target = credentialsFor(raw, environment);
+  if (!target.accessToken) return false;
+  await getPool().query(
+    `INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+    [KEY_ENVIRONMENT, environment],
+  );
+  return true;
+}
+
+export async function setGatewayEnabled(enabled: boolean): Promise<void> {
+  await getPool().query(
+    `INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+    [KEY_ENABLED, enabled ? '1' : '0'],
+  );
+}
+
+/** Força a próxima leitura de `/users/me` (usado pelo botão "Testar conexão"). */
+export function forgetGatewayAccount(token: string): void {
+  if (token) accountCache.delete(token);
 }
 
 /** URL pública que o Mercado Pago chama. Derivada do domínio configurado no cloud. */

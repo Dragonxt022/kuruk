@@ -4,21 +4,98 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <%- include('partials/theme-init') %>
-  <title>Kuruk Cloud — Mercado Pago</title>
+  <title>Kuruk Cloud — Pagamentos</title>
   <link rel="icon" type="image/png" href="/logo_kuruk-icon.png">
   <%- include('partials/styles') %>
   <style>
-    .pay-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
-    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+    .pay-overview { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .pay-overview-main { min-width: 0; }
+    .pay-overview h2 { margin: 0 0 4px; font-size: 1.02rem; }
+    .pay-overview p { margin: 0; color: var(--muted); font-size: .84rem; line-height: 1.5; }
+    .pay-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: .76rem; font-weight: 700; }
     .pill.on { background: var(--primary-soft); color: var(--primary); }
     .pill.off { background: var(--surface-hover); color: var(--muted); }
     .pill.warn { background: #fff4e5; color: #b45309; }
-    .steps { margin: 0; padding-left: 1.1rem; }
-    .steps li { margin-bottom: .6rem; line-height: 1.55; }
+    .pill.danger { background: var(--danger-soft); color: var(--danger); }
+
+    .section-title { margin: 26px 0 4px; font-size: 1.1rem; letter-spacing: -.02em; }
+    .section-lead { margin: 0 0 14px; color: var(--muted); font-size: .85rem; line-height: 1.5; max-width: 840px; }
+
+    .env-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    @media (max-width: 760px) { .env-grid { grid-template-columns: 1fr; } }
+    .env-form { margin: 0; min-width: 0; }
+    .env-card {
+      appearance: none; -webkit-appearance: none;
+      display: flex; flex-direction: column; gap: 10px;
+      width: 100%; height: 100%; text-align: left;
+      padding: 17px 18px; border-radius: 14px;
+      border: 1.5px solid var(--border-light); background: var(--surface);
+      color: var(--text); font: inherit; cursor: pointer;
+      transition: border-color .15s, background .15s, box-shadow .15s;
+    }
+    .env-card:hover { border-color: var(--primary); }
+    .env-card.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 48%, var(--surface)); box-shadow: inset 0 0 0 1px var(--primary); cursor: default; }
+    .env-top { display: flex; align-items: center; gap: 11px; width: 100%; }
+    .env-icon { width: 38px; height: 38px; flex: none; border-radius: 11px; display: grid; place-items: center; background: var(--surface-hover); color: var(--muted); }
+    .env-icon svg { width: 19px; height: 19px; }
+    .env-card.active .env-icon { background: var(--primary); color: #fff; }
+    .env-card.env-teste .env-icon { background: #eef2ff; color: #4338ca; }
+    .env-card.env-teste.active .env-icon { background: #4338ca; color: #fff; }
+    .env-name { flex: 1; min-width: 0; font-weight: 700; font-size: .98rem; line-height: 1.2; }
+    .env-name small { display: block; font-weight: 500; color: var(--muted); font-size: .74rem; margin-top: 2px; }
+    .env-state { flex: none; font-size: .72rem; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: var(--surface-hover); color: var(--muted); }
+    .env-state.active { background: var(--primary); color: #fff; }
+    .env-note { font-size: .8rem; color: var(--muted); line-height: 1.45; }
+    .env-cred { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .76rem; color: var(--muted); padding-top: 9px; border-top: 1px dashed var(--border-light); }
+    .env-cred strong { color: var(--text); font-weight: 600; }
+    .env-cred code { background: var(--surface-hover); padding: 1px 5px; border-radius: 5px; font-size: .92em; }
+
+    .alert { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; border: 1px solid; }
+    .alert strong { display: block; font-size: .9rem; }
+    .alert p { margin: 4px 0 0; font-size: .82rem; line-height: 1.45; }
+    .alert.good { background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 35%, transparent); color: var(--primary); }
+    .alert.good p { color: var(--text-secondary); }
+    .alert.warn { background: #fff8ec; border-color: #f5c26b; color: #92400e; }
+    .alert.warn p { color: #7c5a24; }
+    .alert.bad { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, transparent); color: var(--danger); }
+    .alert.bad p { color: var(--text-secondary); }
+
+    .cred-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+    @media (max-width: 980px) { .cred-grid { grid-template-columns: 1fr; } }
+    .cred-card { padding: 20px 22px; }
+    .cred-card.active { border-color: color-mix(in srgb, var(--primary) 45%, var(--border-light)); }
+    .cred-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .cred-head h3 { margin: 0; font-size: .98rem; }
+    .cred-sub { margin: 4px 0 14px; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+    .cred-card label { margin-top: 12px; }
+    .cred-card label:first-of-type { margin-top: 0; }
+    .cred-card .field-hint { margin: 5px 0 0; }
+    .cred-card code { background: var(--surface-hover); padding: 1px 5px; border-radius: 5px; font-size: .88em; }
+    .cred-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .cred-actions .btn { flex: 1; justify-content: center; min-width: 150px; }
+    .cred-tip { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px; background: var(--surface-hover); font-size: .77rem; color: var(--muted); line-height: 1.5; }
+    .cred-tip strong { color: var(--text); }
+
+    .webhook-card { margin-top: 18px; }
     .copy-row { display: flex; gap: 8px; align-items: center; }
-    .copy-row input { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
-    code { background: var(--surface-hover); padding: 1px 6px; border-radius: 6px; font-size: .85em; }
-    .tutorial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    .copy-row input { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; margin-bottom: 0; }
+    .copy-row .btn { flex: none; }
+    .help-block { margin-top: 18px; padding: 0; }
+    .help-block summary { cursor: pointer; padding: 16px 22px; font-weight: 700; font-size: .92rem; list-style: none; display: flex; align-items: center; gap: 8px; }
+    .help-block summary::-webkit-details-marker { display: none; }
+    .help-block summary .chev { transition: transform .15s; }
+    .help-block[open] summary .chev { transform: rotate(90deg); }
+    .help-body { padding: 0 22px 20px; border-top: 1px solid var(--border-light); }
+    .steps { margin: 14px 0 0; padding-left: 1.1rem; }
+    .steps li { margin-bottom: .7rem; line-height: 1.55; font-size: .86rem; }
+    .steps li:last-child { margin-bottom: 0; }
+    .tech-line { margin: 18px 0 0; font-size: .76rem; color: var(--muted); }
+    .tech-line code { background: var(--surface-hover); padding: 1px 5px; border-radius: 5px; }
+    @media (max-width: 560px) {
+      .cred-actions .btn { width: 100%; flex: 1 1 100%; }
+      .copy-row { flex-direction: column; align-items: stretch; }
+    }
   </style>
 </head>
 <body>
@@ -32,169 +109,261 @@
         <% if (typeof error !== 'undefined' && error) { %><p class="error-banner"><%= error %></p><% } %>
 
         <div class="page-header">
-          <p class="field-hint" style="margin:0 0 4px"><a href="/admin/gateways">← Gateways de pagamento</a></p>
-          <h1>Mercado Pago</h1>
-          <p class="field-hint" style="margin-top:0">
-            Como o cliente paga a assinatura: Pix, boleto ou cartão pelo Mercado Pago. O valor
-            cobrado vem sempre da cobrança registrada na empresa — nada aqui muda preço.
+          <p class="breadcrumb"><a href="/admin/gateways" style="color:inherit;text-decoration:none">Gateways de pagamento</a></p>
+          <h1>Pagamentos</h1>
+          <p class="page-subtitle">
+            As credenciais de <strong>produção</strong> e de <strong>teste</strong> ficam salvas ao mesmo tempo.
+            Troque de ambiente com um clique — não precisa digitar as chaves de novo.
           </p>
         </div>
 
-        <div class="pay-status">
-          <% if (gateway.enabled && gateway.accessTokenSet) { %>
-            <span class="pill on">● Pagamento online ligado</span>
-          <% } else if (gateway.accessTokenSet) { %>
-            <span class="pill warn">● Credencial salva, mas o pagamento está desligado</span>
-          <% } else { %>
-            <span class="pill off">● Ainda não configurado</span>
-          <% } %>
-          <% if (gateway.accessTokenSet) { %>
-            <span class="pill <%= gateway.environment === 'producao' ? 'on' : 'off' %>">
-              Credencial de <%= gateway.environment === 'producao' ? 'PRODUÇÃO (dinheiro real)' : (gateway.environment === 'teste' ? 'TESTE (sandbox)' : 'origem desconhecida') %>
-            </span>
-            <% if (gateway.accountEmail) { %>
-              <span class="pill off" title="Conta dona do Access Token">Conta: <%= gateway.accountEmail %></span>
-            <% } %>
-          <% } %>
-          <span class="pill off">API: <%= gateway.apiBase %></span>
+        <div class="card pay-overview">
+          <div class="pay-overview-main">
+            <h2>Pagamento online</h2>
+            <p><%= gateway.enabled ? 'Os clientes podem pagar a assinatura pelo Mercado Pago.' : 'Nenhuma cobrança online é gerada enquanto o pagamento estiver desligado.' %></p>
+            <div class="pay-status">
+              <% if (gateway.enabled && gateway.accessTokenSet) { %>
+                <span class="pill on">● Ligado</span>
+              <% } else if (gateway.accessTokenSet) { %>
+                <span class="pill warn">● Credencial salva, pagamento desligado</span>
+              <% } else { %>
+                <span class="pill off">● Não configurado</span>
+              <% } %>
+              <span class="pill <%= gateway.selectedEnvironment === 'producao' ? 'on' : 'warn' %>">
+                <%= gateway.selectedEnvironment === 'producao' ? 'Produção (dinheiro real)' : 'Testes (sandbox)' %>
+              </span>
+              <% if (gateway.accountEmail) { %>
+                <span class="pill off" title="Conta dona do Access Token"><%= gateway.accountEmail %></span>
+              <% } %>
+            </div>
+          </div>
+          <form method="post" action="/admin/payments/enable">
+            <input type="hidden" name="enabled" value="<%= gateway.enabled ? '0' : '1' %>">
+            <button type="submit" class="btn <%= gateway.enabled ? 'secondary' : '' %>">
+              <%= gateway.enabled ? 'Desligar pagamento online' : 'Ativar pagamento online' %>
+            </button>
+          </form>
         </div>
 
-        <% if (gateway.accessTokenSet && !gateway.enabled) { %>
-          <div class="gateway-alert">
+        <% if (gateway.enabled && gateway.selectedEnvironment === 'teste') { %>
+          <div class="alert warn" style="margin-top:16px">
             <div>
-              <strong>Credenciais salvas, mas o pagamento online está desligado.</strong>
-              <p>O token e a chave do webhook já estão no servidor. Falta apenas ativar o gateway para o Kuruk gerar cobranças.</p>
+              <strong>Modo de teste ativo — nenhum valor real será cobrado.</strong>
+              <p>Use este modo para validar Pix e cartão. Quando terminar os testes, volte para o ambiente de produção.</p>
             </div>
-            <form method="post" action="/admin/payments/enable">
-              <input type="hidden" name="enabled" value="1">
-              <button type="submit" class="btn">Ativar pagamento online</button>
+            <form method="post" action="/admin/payments/environment">
+              <input type="hidden" name="environment" value="producao">
+              <button type="submit" class="btn">Voltar para produção</button>
             </form>
           </div>
-        <% } else if (gateway.enabled && gateway.accessTokenSet) { %>
-          <div class="gateway-alert ok">
+        <% } %>
+        <% if (gateway.enabled && !gateway.accessTokenSet) { %>
+          <div class="alert bad" style="margin-top:16px">
             <div>
-              <strong>Pagamento online ativo.</strong>
-              <p>Token salvo e webhook <%= gateway.webhookSecretSet ? 'com assinatura secreta configurada' : 'sem assinatura secreta (a origem não será validada)' %>.</p>
+              <strong>O ambiente selecionado está sem Access Token.</strong>
+              <p>Cole a credencial de <%= gateway.selectedEnvironment === 'teste' ? 'teste' : 'produção' %> no cartão abaixo e salve.</p>
+            </div>
+          </div>
+        <% } %>
+        <% if (!gateway.enabled && gateway.accessTokenSet) { %>
+          <div class="alert warn" style="margin-top:16px">
+            <div>
+              <strong>As credenciais estão salvas, mas o pagamento online está desligado.</strong>
+              <p>Ative o pagamento no botão acima para o Kuruk voltar a gerar Pix, boleto e link de cartão.</p>
+            </div>
+          </div>
+        <% } %>
+        <% if (gateway.accessTokenSet && gateway.environment !== 'desconhecido' && gateway.environment !== gateway.selectedEnvironment) { %>
+          <div class="alert bad" style="margin-top:16px">
+            <div>
+              <strong>A credencial salva em <%= gateway.selectedEnvironment === 'teste' ? 'testes' : 'produção' %> parece ser de <%= gateway.environment === 'teste' ? 'teste' : 'produção' %>.</strong>
+              <p>Confira se você colou o Access Token no cartão certo. Pagador e recebedor precisam estar no mesmo ambiente do Mercado Pago.</p>
             </div>
           </div>
         <% } %>
 
-        <div class="tutorial-grid">
-          <!-- ───────────── Configuração ───────────── -->
-          <div class="card">
-            <h2>Credenciais do Mercado Pago</h2>
-            <form method="post" action="/admin/payments" autocomplete="off" data-form-type="other">
-              <label class="label-checkbox-sm" style="display:flex; align-items:center; gap:8px; margin-top:0">
-                <input type="checkbox" name="enabled" value="1" <%= gateway.enabled ? 'checked' : '' %>>
-                <span>Aceitar pagamento online nas cobranças</span>
-              </label>
-              <p class="field-hint">Desligado, o painel não gera Pix/boleto e a tela de Cobranças do cliente não oferece o pagamento.</p>
+        <h2 class="section-title">Ambiente</h2>
+        <p class="section-lead">
+          O ambiente ativo vale para todas as cobranças. Em <strong>testes</strong>, use contas e e-mails de teste do Mercado Pago.
+        </p>
+        <div class="env-grid">
+          <% gateway.environments.forEach(function (e) { %>
+            <% var teste = e.environment === 'teste'; %>
+            <form class="env-form" method="post" action="/admin/payments/environment">
+              <input type="hidden" name="environment" value="<%= e.environment %>">
+              <button type="submit" class="env-card <%= teste ? 'env-teste' : 'env-producao' %> <%= e.active ? 'active' : '' %>"
+                      <%= e.active ? 'aria-current="true"' : '' %>>
+                <span class="env-top">
+                  <span class="env-icon">
+                    <% if (teste) { %>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5 8.5A2 2 0 0 0 6.7 21h10.6a2 2 0 0 0 1.7-3.5L14 9V3"/><path d="M7.5 15h9"/></svg>
+                    <% } else { %>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 12l2 2 4-4"/></svg>
+                    <% } %>
+                  </span>
+                  <span class="env-name">
+                    <%= teste ? 'Testes' : 'Produção' %>
+                    <small><%= teste ? 'Sandbox — sem dinheiro real' : 'Dinheiro real — cobranças de verdade' %></small>
+                  </span>
+                  <span class="env-state <%= e.active ? 'active' : '' %>"><%= e.active ? '✓ Em uso' : 'Usar' %></span>
+                </span>
+                <span class="env-note">
+                  <%= teste
+                    ? 'Ideal para testar Pix e cartão antes de abrir para os clientes.'
+                    : 'Use quando o Kuruk estiver pronto para cobrar de verdade.' %>
+                </span>
+                <span class="env-cred">
+                  <% if (e.accessTokenSet) { %>
+                    <span><strong>Credencial salva</strong> <code><%= e.accessTokenPreview %></code></span>
+                    <% if (e.accountEmail) { %><span>Conta: <strong><%= e.accountEmail %></strong></span><% } %>
+                  <% } else { %>
+                    <span><strong>Sem credencial salva.</strong> Preencha o cartão <%= teste ? 'de testes' : 'de produção' %> abaixo.</span>
+                  <% } %>
+                </span>
+              </button>
+            </form>
+          <% }); %>
+        </div>
 
-              <label>Access Token</label>
-              <input type="password" name="accessToken" autocomplete="new-password"
-                     autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
-                     placeholder="<%= gateway.accessTokenSet ? 'Deixe em branco para manter a credencial salva' : 'APP_USR-00000000-0000-0000-0000-000000000000-000000000' %>">
-              <% if (gateway.accessTokenSet) { %>
-                <p class="field-hint"><strong>Salvo no servidor:</strong> <code><%= gateway.accessTokenPreview %></code> — em branco mantém esta credencial.</p>
-              <% } else { %>
-                <p class="field-hint">Começa com <code>APP_USR-</code> em produção e <code>TEST-</code> no sandbox. Só o servidor do Kuruk usa esta chave; ela nunca é enviada ao programa do cliente.</p>
-              <% } %>
-
-              <label>Assinatura secreta do webhook</label>
-              <input type="password" name="webhookSecret" autocomplete="new-password"
-                     autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
-                     placeholder="<%= gateway.webhookSecretSet ? 'Deixe em branco para manter a assinatura salva' : 'Chave gerada pelo Mercado Pago ao salvar os webhooks' %>">
-              <p class="field-hint">
-                <% if (gateway.webhookSecretSet) { %><strong>Assinatura secreta salva no servidor.</strong> <% } %>
-                Sem ela o Kuruk ainda confirma o pagamento (reconsulta na API), mas não consegue provar que a notificação veio do Mercado Pago.
+        <h2 class="section-title">Credenciais</h2>
+        <p class="section-lead">
+          Cada ambiente guarda seu próprio Access Token e assinatura do webhook. Campo em branco mantém o valor já salvo.
+        </p>
+        <div class="cred-grid">
+          <% gateway.environments.forEach(function (e) { %>
+            <% var teste = e.environment === 'teste'; %>
+            <div class="card cred-card <%= e.active ? 'active' : '' %>">
+              <div class="cred-head">
+                <h3>Credenciais de <%= teste ? 'teste' : 'produção' %></h3>
+                <% if (e.active) { %><span class="pill on">✓ Em uso</span><% } else { %><span class="pill off">Não está em uso</span><% } %>
+              </div>
+              <p class="cred-sub">
+                <%= teste
+                  ? 'Chaves geradas no painel do Mercado Pago em “Credenciais de teste”.'
+                  : 'Chaves geradas em “Credenciais de produção”, da conta que vai receber o dinheiro.' %>
               </p>
 
-              <label>E-mail do pagador (padrão)</label>
-              <input type="text" name="payerEmail" value="<%= gateway.payerEmail %>" autocomplete="off" placeholder="financeiro@suaempresa.com.br">
-              <p class="field-hint">O Pix exige e-mail do pagador. Usado quando a cobrança e o cadastro da empresa não têm um.</p>
+              <form method="post" action="/admin/payments" autocomplete="off" data-form-type="other">
+                <input type="hidden" name="environment" value="<%= e.environment %>">
 
-              <div class="form-actions-bar">
-                <button type="submit" class="btn">Salvar</button>
-              </div>
-            </form>
+                <label>Access Token</label>
+                <input type="password" name="accessToken" autocomplete="new-password"
+                       autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
+                       placeholder="<%= e.accessTokenSet ? 'Deixe em branco para manter a credencial salva' : (teste ? 'TEST-00000000-0000-0000-0000-000000000000' : 'APP_USR-00000000-0000-0000-0000-000000000000-000000000') %>">
+                <% if (e.accessTokenSet) { %>
+                  <p class="field-hint"><strong>Salvo no servidor:</strong> <code><%= e.accessTokenPreview %></code> — em branco mantém esta credencial.</p>
+                <% } else { %>
+                  <p class="field-hint">Começa com <code><%= teste ? 'TEST-' : 'APP_USR-' %></code>. Só o servidor do Kuruk usa esta chave.</p>
+                <% } %>
+
+                <label>Assinatura secreta do webhook</label>
+                <input type="password" name="webhookSecret" autocomplete="new-password"
+                       autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true"
+                       placeholder="<%= e.webhookSecretSet ? 'Deixe em branco para manter a assinatura salva' : 'Chave mostrada pelo Mercado Pago ao salvar o webhook' %>">
+                <p class="field-hint">
+                  <% if (e.webhookSecretSet) { %><strong>Assinatura salva.</strong> <% } %>
+                  Sem ela o Kuruk ainda confirma o pagamento, mas não consegue provar que a notificação veio do Mercado Pago.
+                </p>
+
+                <label>E-mail padrão do pagador</label>
+                <input type="text" name="payerEmail" value="<%= e.payerEmail %>" autocomplete="off"
+                       placeholder="<%= teste ? 'test_user_...@testuser.com' : 'financeiro@suaempresa.com.br' %>">
+                <p class="field-hint">
+                  <%= teste
+                    ? 'No sandbox, use o e-mail de um comprador de teste da sua conta Mercado Pago.'
+                    : 'Usado quando a cobrança e a empresa não têm e-mail. No cartão, precisa ser o e-mail da conta que autoriza a assinatura.' %>
+                </p>
+
+                <div class="cred-actions">
+                  <button type="submit" class="btn">Salvar credenciais</button>
+                  <% if (e.active) { %>
+                    <button type="submit" class="btn secondary" formaction="/admin/payments/test"
+                            <%= e.accessTokenSet ? '' : 'disabled' %>>Testar conexão</button>
+                  <% } else { %>
+                    <button type="button" class="btn secondary" disabled title="Ative este ambiente para testar a conexão">Testar conexão</button>
+                  <% } %>
+                </div>
+              </form>
+
+              <% if (teste) { %>
+                <p class="cred-tip"><strong>Importante no sandbox:</strong> pagamentos de teste não disparam webhook. Para simular a notificação, use “Simular recebimento” no painel do Mercado Pago.</p>
+              <% } else { %>
+                <p class="cred-tip"><strong>Pix:</strong> pode usar o e-mail do cliente. <strong>Assinatura no cartão:</strong> use o e-mail da conta Mercado Pago que vai autorizar a recorrência.</p>
+              <% } %>
+            </div>
+          <% }); %>
+        </div>
+
+        <div class="card webhook-card">
+          <h2>Endereço do webhook</h2>
+          <p class="field-hint" style="margin:4px 0 10px">
+            Cole esta URL em <strong>Webhooks › Configurar notificações</strong> nos dois ambientes e marque o evento
+            <strong>Pagamentos</strong>. É por ela que o Mercado Pago avisa o Kuruk quando o pagamento é aprovado.
+          </p>
+          <div class="copy-row">
+            <input type="text" id="webhook-url" readonly value="<%= gateway.notificationUrl %>">
+            <button type="button" class="btn secondary" id="copy-webhook">Copiar</button>
           </div>
+        </div>
 
-          <!-- ───────────── Tutorial ───────────── -->
-          <div class="card">
-            <h2>Como conseguir a chave (passo a passo)</h2>
+        <details class="card help-block">
+          <summary>
+            <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            Como conseguir cada credencial no Mercado Pago
+          </summary>
+          <div class="help-body">
             <ol class="steps">
               <li>
                 Abra <a href="https://www.mercadopago.com.br/developers/panel/app" target="_blank" rel="noopener">Suas integrações</a>
                 e entre com a conta do Mercado Pago que vai <strong>receber</strong> o dinheiro.
               </li>
               <li>
-                <strong>Crie uma aplicação</strong> (ou abra a existente). É ela que assina a integração
-                e gera as chaves. Sugestão de nome: <code>Kuruk — assinaturas</code>.
+                <strong>Crie uma aplicação</strong> (ou abra a existente). É ela que assina a integração.
+                Sugestão de nome: <code>Kuruk — assinaturas</code>.
               </li>
               <li>
-                No menu da esquerda, entre em <strong>Produção › Credenciais de produção</strong>.
-                Preencha <strong>Ramo/Indústria</strong>, o <strong>Site</strong> (use o endereço do
-                Kuruk Cloud), aceite os termos e clique em <strong>Ativar credenciais de produção</strong>.
+                Para <strong>testes</strong>, abra <strong>Credenciais de teste</strong> e copie o Access Token
+                que começa com <code>TEST-</code>. Para <strong>produção</strong>, abra
+                <strong>Produção › Credenciais de produção</strong>, preencha os dados pedidos, ative as
+                credenciais e copie o token que começa com <code>APP_USR-</code>.
               </li>
               <li>
-                Copie o <strong>Access Token</strong> (começa com <code>APP_USR-</code>) e cole no campo
-                acima. A <em>Public Key</em> não é usada aqui: quem fala com o Mercado Pago é o servidor.
+                A <em>Public Key</em> não é usada aqui: quem fala com o Mercado Pago é o servidor do Kuruk.
               </li>
               <li>
-                Ainda na aplicação, entre em <strong>Webhooks › Configurar notificações</strong>, cole a
-                URL abaixo em <strong>URL de produção</strong>, marque o evento
-                <strong>Pagamentos</strong> (<code>payment</code>) e clique em <strong>Salvar</strong>.
-                <div class="copy-row" style="margin-top:8px">
-                  <input type="text" id="webhook-url" readonly value="<%= gateway.notificationUrl %>">
-                  <button type="button" class="btn secondary" id="copy-webhook">Copiar</button>
-                </div>
+                Em <strong>Webhooks › Configurar notificações</strong>, cole a URL acima em
+                <strong>URL de produção</strong> (ou na URL de teste, no sandbox), marque o evento
+                <strong>Pagamentos</strong> e clique em <strong>Salvar</strong>.
               </li>
               <li>
                 Ao salvar, o Mercado Pago mostra a <strong>assinatura secreta</strong>. Copie e cole no
-                campo acima — é o que permite ao Kuruk provar que a notificação veio deles.
+                cartão do ambiente correspondente.
               </li>
-              <% if (gateway.environment !== 'producao') { %>
-              <li>
-                Para testar antes de valer: use as <strong>Credenciais de teste</strong> (<code>TEST-</code>).
-                Atenção: <strong>pagamento de teste não dispara webhook</strong> — o teste de notificação é
-                pelo botão <em>Simular recebimento</em> no próprio painel do Mercado Pago.
-              </li>
-              <% } %>
             </ol>
           </div>
-        </div>
+        </details>
 
-        <div class="card" style="margin-top:20px">
-          <h2>Como funciona depois de configurado</h2>
-          <ul class="steps">
-            <li>
-              Na empresa, cada cobrança pendente ganha os botões <strong>Gerar Pix</strong>,
-              <strong>Gerar boleto</strong> e <strong>Gerar link de cartão</strong>. O QR, o código e o
-              link aparecem na própria cobrança para você enviar ao cliente.
-            </li>
-            <li>
-              Toda cobrança tem uma <strong>página pública</strong> (<code>/pagar/&lt;token&gt;</code>) — o
-              link que você manda por WhatsApp ou e-mail. Nela o cliente vê o valor e paga sem login.
-            </li>
-            <li>
-              O cliente também paga <strong>de dentro do programa</strong>, na tela Cobranças.
-            </li>
-            <li>
-              Quando o pagamento é aprovado, o Mercado Pago avisa o Kuruk (webhook) e o Kuruk
-              <strong>reconfere o pagamento na API deles</strong> antes de dar baixa — notificação
-              sozinha não marca cobrança como paga.
-            </li>
-            <li>
-              Se a cobrança tiver <strong>“estende a licença em N dias”</strong>, a validade da empresa é
-              empurrada na mesma hora (contando de hoje quando já venceu). Sem isso, a baixa é só
-              financeira.
-            </li>
-            <li>
-              O botão <strong>Aguardando pagamento / verificar agora</strong> na cobrança consulta o
-              status na hora — útil quando a URL do webhook ainda não estava configurada.
-            </li>
-          </ul>
-        </div>
+        <details class="card help-block">
+          <summary>
+            <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            Como funciona depois de configurado
+          </summary>
+          <div class="help-body">
+            <ul class="steps">
+              <li>Em cada cobrança pendente aparecem os botões <strong>Gerar Pix</strong>, <strong>Gerar boleto</strong> e <strong>Gerar link de cartão</strong>.</li>
+              <li>Toda cobrança também ganha uma <strong>página pública</strong> (<code>/pagar/&lt;token&gt;</code>) para enviar por WhatsApp ou e-mail. O cliente paga sem login.</li>
+              <li>O cliente também pode pagar de dentro do programa, na tela <strong>Cobranças</strong>.</li>
+              <li>Quando o pagamento é aprovado, o Mercado Pago avisa o Kuruk e o Kuruk <strong>reconfere o pagamento na API</strong> antes de dar baixa.</li>
+              <li>Se a cobrança tiver <strong>“estende a licença em N dias”</strong>, a validade da empresa é empurrada na mesma hora.</li>
+              <li>O botão <strong>verificar agora</strong> na cobrança consulta o status na hora — útil quando o webhook ainda não chegou.</li>
+            </ul>
+          </div>
+        </details>
+
+        <p class="tech-line">
+          API do Mercado Pago: <code><%= gateway.apiBase %></code>
+          <% if (gateway.accountNickname) { %> · Conta: <strong><%= gateway.accountNickname %></strong><% } %>
+        </p>
       </div>
     </main>
   </div>
