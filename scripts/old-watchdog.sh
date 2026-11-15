@@ -158,17 +158,42 @@ except Exception:
 ' 2>/dev/null)"
 rm -f "$req" "$resp"
 
-msg="🚨 OLD - watchdog
-
-${texto_problemas}
-
-Sugestao do Old:
-${sugestao:-(sem sugestao da IA agora)}"
-
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-  curl -sS -m 20 -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "text=${msg}" >/dev/null 2>&1 || echo "watchdog: falha ao enviar Telegram"
+  TG_PROBLEMAS="$texto_problemas" TG_SUGESTAO="$sugestao" TG_HORA="$(date '+%d/%m %H:%M')" \
+  /usr/bin/python3 - <<'PY'
+import html, json, os, urllib.parse, urllib.request
+
+def esc(v):
+    return html.escape(str(v), quote=False)
+
+hora = os.environ.get("TG_HORA", "")
+problemas = [linha for linha in os.environ.get("TG_PROBLEMAS", "").splitlines() if linha.strip()]
+sugestao = os.environ.get("TG_SUGESTAO", "").strip() or "(sem sugestao da IA agora)"
+
+corpo = "\n".join("• " + esc(item) for item in problemas)
+texto = (
+    "🚨 <b>OLD · watchdog</b>\n"
+    f"<i>{esc(hora)}</i>\n\n"
+    f"{corpo}\n\n"
+    "🤖 <b>Sugestão</b>\n"
+    f"<pre>{esc(sugestao)}</pre>"
+)
+
+dados = urllib.parse.urlencode({
+    "chat_id": os.environ["TELEGRAM_CHAT_ID"],
+    "text": texto,
+    "parse_mode": "HTML",
+}).encode()
+req = urllib.request.Request(
+    f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/sendMessage",
+    data=dados,
+)
+try:
+    urllib.request.urlopen(req, timeout=30)
+    print("[watchdog] alerta enviado no Telegram")
+except Exception as exc:  # noqa: BLE001
+    print(f"[watchdog] falha ao enviar Telegram: {exc}")
+PY
   echo "[$(date '+%F %T')] alertado: ${problemas[*]}"
 else
   echo "[$(date '+%F %T')] problemas sem Telegram configurado: ${detalhes[*]}"
