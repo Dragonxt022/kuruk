@@ -36,7 +36,9 @@ export interface PayAccountState {
   configured: boolean;
   connected: boolean;
   environment: 'teste' | 'producao';
+  defaultEnvironment: 'teste' | 'producao';
   callbackUrl: string;
+  environments: { environment: 'teste' | 'producao'; configured: boolean }[];
   account: PayAccountInfo | null;
   terminals: PayTerminalInfo[];
   defaultTerminalId: string | null;
@@ -127,6 +129,13 @@ export async function fetchPayAccount(environment?: 'teste' | 'producao'): Promi
   return payRequest<PayAccountState>(`/account${qs}`, {}, 8_000);
 }
 
+/** Troca o ambiente da empresa com um clique (o PDV passa a usar o novo). */
+export async function switchPayEnvironment(
+  environment: 'teste' | 'producao',
+): Promise<PayResult<{ ok: true; environment: 'teste' | 'producao' }>> {
+  return payRequest('/environment', { method: 'POST', body: { environment } });
+}
+
 export async function connectPayAccount(
   environment: 'teste' | 'producao',
   returnUrl = '/pay/conectado?origem=desktop',
@@ -169,6 +178,7 @@ export interface CreatePointOrderInput {
   terminalId?: string | null;
   origin?: 'pdv' | 'painel' | 'teste';
   saleUuid?: string | null;
+  environment?: 'teste' | 'producao';
 }
 
 export async function createPointOrder(
@@ -182,6 +192,7 @@ export async function createPointOrder(
       terminalId: input.terminalId ?? null,
       origin: input.origin ?? 'pdv',
       saleUuid: input.saleUuid ?? null,
+      environment: input.environment ?? null,
     },
   }, 30_000);
 }

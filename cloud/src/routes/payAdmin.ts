@@ -3,7 +3,7 @@ import { requireAdminAuth } from '../adminAuth';
 import {
   disconnectPayAccount, friendlyPayMessage, listPayAccountsForAdmin, listPayOrdersForAdmin,
   loadPayAppSettingsView, normalizePayEnvironment, refreshPayOrder, refundPayOrder,
-  savePayAppSettings, serializePayOrder,
+  savePayAppSettings, serializePayOrder, setCompanyPayEnvironment, setPayDefaultEnvironment,
 } from '../pay';
 
 /**
@@ -40,11 +40,40 @@ router.get('/pay', requireAdminAuth, async (req, res) => {
 
 router.post('/pay/settings', requireAdminAuth, async (req, res) => {
   try {
-    await savePayAppSettings((req.body ?? {}) as Record<string, unknown>);
-    res.redirect('/admin/pay?ok=' + encodeURIComponent('Credenciais do aplicativo Kuruk Pay salvas.'));
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const environment = normalizePayEnvironment(body.environment);
+    await savePayAppSettings(environment, body);
+    const label = environment === 'teste' ? 'teste' : 'produção';
+    res.redirect('/admin/pay?ok=' + encodeURIComponent(`Credenciais de ${label} salvas.`));
   } catch (e) {
     res.redirect('/admin/pay?error=' + encodeURIComponent((e as Error).message));
   }
+});
+
+/** Troca o ambiente PADRÃO para empresas que ainda não escolheram o próprio. */
+router.post('/pay/environment', requireAdminAuth, async (req, res) => {
+  const environment = normalizePayEnvironment((req.body ?? {}).environment);
+  const ok = await setPayDefaultEnvironment(environment);
+  if (!ok) {
+    const label = environment === 'teste' ? 'teste' : 'produção';
+    res.redirect('/admin/pay?error=' + encodeURIComponent(
+      `Salve o Client ID e o Client Secret de ${label} antes de ativar este ambiente.`,
+    ));
+    return;
+  }
+  const msg = environment === 'teste'
+    ? 'Ambiente de teste ativado como padrão. Nenhum valor real será cobrado.'
+    : 'Ambiente de produção ativado como padrão.';
+  res.redirect('/admin/pay?ok=' + encodeURIComponent(msg));
+});
+
+/** Troca o ambiente de UMA empresa com um clique (vale para o app/PDV dela). */
+router.post('/pay/companies/:uuid/environment', requireAdminAuth, async (req, res) => {
+  const environment = normalizePayEnvironment((req.body ?? {}).environment);
+  await setCompanyPayEnvironment(String(req.params.uuid), environment);
+  res.redirect('/admin/pay?ok=' + encodeURIComponent(
+    `Empresa agora está no ambiente de ${environment === 'teste' ? 'teste' : 'produção'}.`,
+  ));
 });
 
 router.post('/pay/accounts/:uuid/disconnect', requireAdminAuth, async (req, res) => {

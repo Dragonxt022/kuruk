@@ -892,6 +892,8 @@
               Envia <strong x-text="brl(cents(pay.amount))"></strong> ao terminal e espera a aprovação.
             </span>
           </span>
+          <span x-show="point.environment === 'teste'" x-cloak
+                style="margin-left:auto;background:#fff4e5;color:#b45309;padding:2px 8px;border-radius:999px;font-size:.68rem;font-weight:800">TESTE</span>
         </label>
         <div x-show="point.use" x-cloak style="margin-top:8px">
           <label class="pay-field-label" for="pay-point-terminal">Terminal</label>
@@ -1014,7 +1016,7 @@
 
     <!-- ─── MODAL: cobrança na maquininha Point (Kuruk Pay) ─── -->
     <dialog x-ref="pointDlg" class="dialog-fixed" @cancel.prevent="point.charging ? $event.preventDefault() : $refs.pointDlg.close()">
-      <h1>Maquininha Point</h1>
+      <h1>Maquininha Point <span class="muted" style="font-size:.8rem" x-show="point.environment === 'teste'" x-cloak>· TESTE</span></h1>
       <div class="dialog-body" style="text-align:center">
         <div class="pdv-point-spinner" x-show="point.charging" x-cloak></div>
         <p style="font-size:1rem;font-weight:700;margin:14px 0 4px" x-text="point.label || 'Enviando para a maquininha…'"></p>
@@ -1299,7 +1301,7 @@
         // Kuruk Pay (maquininha Point). `enabled` só vira true quando a nuvem responde que
         // a conta está conectada e existe terminal; sem isso a opção nem aparece no PDV.
         point: {
-          enabled: false, terminals: [], terminalId: '', use: false,
+          enabled: false, environment: 'producao', terminals: [], terminalId: '', use: false,
           charging: false, orderUuid: '', status: '', label: '', error: '', pollTimer: null,
         },
         showSplit: false,
@@ -2687,6 +2689,7 @@
             if (!r.ok) return;
             const d = await r.json();
             this.point.enabled = !!d.enabled;
+            this.point.environment = d.environment === 'teste' ? 'teste' : 'producao';
             this.point.terminals = Array.isArray(d.terminals) ? d.terminals : [];
             this.point.terminalId = d.defaultTerminalId
               || (this.point.terminals[0] && this.point.terminals[0].terminalId)

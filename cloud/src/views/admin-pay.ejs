@@ -8,10 +8,12 @@
   <link rel="icon" type="image/png" href="/logo_kuruk-icon.png">
   <%- include('partials/styles') %>
   <style>
-    .pay-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 18px; align-items: start; }
+    .pay-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
     @media (max-width: 980px) { .pay-grid { grid-template-columns: 1fr; } }
     .pay-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-xs); }
-    .pay-card h2 { margin: 0 0 4px; font-size: 1.02rem; }
+    .pay-card.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+    .pay-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+    .pay-card h2 { margin: 0; font-size: 1.02rem; }
     .pay-card .hint { margin: 0 0 16px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
     .pay-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
     .pay-field label { font-size: .78rem; font-weight: 700; color: var(--muted); }
@@ -33,10 +35,15 @@
     .pay-actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .pay-actions form { margin: 0; }
     .pay-btn-sm { padding: 4px 9px; font-size: .7rem; }
+    .pay-btn-sm.current { opacity: .55; }
     .pay-alert { padding: 10px 13px; border-radius: 10px; font-size: .8rem; margin-bottom: 14px; }
     .pay-alert.ok { background: #eaf7ee; color: #17663a; }
     .pay-alert.err { background: #fdecec; color: #b42318; }
     .pay-flow { margin: 0; padding-left: 18px; color: var(--muted); font-size: .78rem; line-height: 1.65; }
+    .pay-env-switch { display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--surface-hover); }
+    .pay-env-switch form { margin: 0; }
+    .pay-env-switch button { border: 0; background: transparent; padding: 4px 8px; border-radius: 6px; font-size: .68rem; font-weight: 700; cursor: pointer; color: var(--muted); }
+    .pay-env-switch button.current { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-xs); cursor: default; }
   </style>
 </head>
 <body>
@@ -55,88 +62,107 @@
 
         <% if (ok) { %><div class="pay-alert ok"><%= ok %></div><% } %>
         <% if (error) { %><div class="pay-alert err"><%= error %></div><% } %>
-        <% if (!app.configured) { %>
-          <div class="pay-alert err">
-            <strong>Falta o Client Secret para ativar o Kuruk Pay.</strong>
-            Abra o aplicativo <strong>Kuruk-Pay</strong> no painel de desenvolvedores do Mercado Pago,
-            copie o <strong>Client Secret de produção</strong> e cole no campo abaixo. Sem ele, o botão
-            “Conectar Mercado Pago” do lojista não funciona.
+
+        <section class="pay-card" style="margin-bottom:18px">
+          <div class="pay-card-head">
+            <h2>Aplicativo Kuruk Pay</h2>
+            <% if (app.configured) { %><span class="pill on">Padrão configurado</span><% } else { %><span class="pill err">Padrão sem credenciais</span><% } %>
           </div>
-        <% } else if (!accounts.length) { %>
-          <div class="pay-alert ok">
-            Aplicativo configurado. Agora cada lojista conecta a própria conta em
-            <strong>Kuruk Pay</strong> no app ou em <strong>/m/pay</strong>.
+          <p class="hint">
+            Credenciais do aplicativo criado no Mercado Pago (App ID <strong>5049718943825028</strong>).
+            Teste e produção ficam salvos ao mesmo tempo — troque com um clique, sem redigitar as chaves.
+            Onde encontrar: <strong>developers.mercadopago.com.br → Suas integrações → Kuruk-Pay →
+            Credenciais de produção / Credenciais de teste</strong>.
+          </p>
+          <div class="pay-field" style="margin-bottom:0">
+            <label>URL de redirecionamento (a MESMA nos dois ambientes)</label>
+            <div class="pay-copy">
+              <code id="pay-callback"><%= app.callbackUrl %></code>
+              <button type="button" class="btn secondary pay-btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('pay-callback').textContent).then(()=>this.textContent='copiado')">Copiar</button>
+            </div>
+            <span class="pay-sub">No painel do aplicativo: “URLs de redirecionamento”. Precisa ser exatamente esta.</span>
           </div>
-        <% } %>
+        </section>
 
         <div class="pay-grid">
-          <section class="pay-card">
-            <h2>Aplicativo Kuruk Pay</h2>
-            <p class="hint">
-              Credenciais do aplicativo criado no Mercado Pago (App ID <strong>5049718943825028</strong>).
-              Elas identificam o Kuruk perante o MP; o token de cada lojista é obtido por OAuth.
-              Onde encontrar: <strong>developers.mercadopago.com.br → Suas integrações → Kuruk-Pay →
-              Credenciais de produção</strong>.
-            </p>
-            <div class="badge-line">
-              <% if (app.configured) { %><span class="pill on">Aplicativo configurado</span><% } else { %><span class="pill err">Falta Client ID/Secret</span><% } %>
-              <% if (app.webhookSecretSet) { %><span class="pill on">Webhook assinado</span><% } else { %><span class="pill warn">Sem segredo de webhook</span><% } %>
-            </div>
+          <% app.environments.forEach(function (e) {
+               var teste = e.environment === 'teste';
+               var padrao = e.environment === app.defaultEnvironment;
+          %>
+            <section class="pay-card <%= padrao ? 'active' : '' %>">
+              <div class="pay-card-head">
+                <h2><%= teste ? 'Testes' : 'Produção' %></h2>
+                <% if (padrao) { %><span class="pill on">Em uso como padrão</span><% } %>
+                <% if (e.configured) { %><span class="pill off">Credencial salva</span><% } else { %><span class="pill err">Sem credencial</span><% } %>
+              </div>
+              <p class="hint">
+                <%= teste
+                  ? 'Sandbox — nenhum valor real. Use usuários e terminais de teste do Mercado Pago.'
+                  : 'Dinheiro real — use a conta que vai receber as vendas da loja.' %>
+                O ambiente padrão vale para empresas que ainda não escolheram o próprio.
+              </p>
 
-            <form method="post" action="/admin/pay/settings">
-              <div class="pay-field">
-                <label for="pay-client-id">Client ID (App ID)</label>
-                <input id="pay-client-id" name="clientId" value="<%= app.clientId || '' %>" placeholder="5049718943825028" autocomplete="off" />
-              </div>
-              <div class="pay-field">
-                <label for="pay-client-secret">Client Secret</label>
-                <input id="pay-client-secret" name="clientSecret" type="password" placeholder="<%= app.clientSecretSet ? '•••••••• (salvo — deixe em branco para manter)' : 'cole o Client Secret do aplicativo' %>" autocomplete="new-password" />
-              </div>
-              <div class="pay-field">
-                <label for="pay-webhook-secret">Segredo do webhook (opcional)</label>
-                <input id="pay-webhook-secret" name="webhookSecret" type="password" placeholder="<%= app.webhookSecretSet ? '•••••••• (salvo — deixe em branco para manter)' : 'chave secreta de notificações do aplicativo' %>" autocomplete="new-password" />
-              </div>
-              <button class="btn" type="submit">Salvar credenciais</button>
-            </form>
+              <form method="post" action="/admin/pay/settings" autocomplete="off" data-form-type="other">
+                <input type="hidden" name="environment" value="<%= e.environment %>">
 
-            <div class="pay-field" style="margin-top:18px">
-              <label>URL de redirecionamento (cadastre no Mercado Pago)</label>
-              <div class="pay-copy">
-                <code id="pay-callback"><%= app.callbackUrl %></code>
-                <button type="button" class="btn secondary pay-btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('pay-callback').textContent).then(()=>this.textContent='copiado')">Copiar</button>
-              </div>
-              <span class="pay-sub">No painel do aplicativo: “URLs de redirecionamento”. Precisa ser exatamente esta.</span>
-            </div>
-          </section>
+                <div class="pay-field">
+                  <label for="pay-client-id-<%= e.environment %>">Client ID</label>
+                  <input id="pay-client-id-<%= e.environment %>" name="clientId" value="<%= e.clientId || '' %>"
+                         placeholder="5049718943825028" autocomplete="off" autocapitalize="off" spellcheck="false" />
+                </div>
+                <div class="pay-field">
+                  <label for="pay-client-secret-<%= e.environment %>">Client Secret</label>
+                  <input id="pay-client-secret-<%= e.environment %>" name="clientSecret" type="password"
+                         placeholder="<%= e.clientSecretSet ? '•••••••• (salvo — deixe em branco para manter)' : 'cole o Client Secret' %>"
+                         autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" />
+                </div>
+                <div class="pay-field">
+                  <label for="pay-webhook-<%= e.environment %>">Segredo do webhook (opcional)</label>
+                  <input id="pay-webhook-<%= e.environment %>" name="webhookSecret" type="password"
+                         placeholder="<%= e.webhookSecretSet ? '•••••••• (salvo — deixe em branco para manter)' : 'chave secreta de notificações deste ambiente' %>"
+                         autocomplete="new-password" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" />
+                </div>
 
-          <section class="pay-card">
-            <h2>Como o lojista conecta</h2>
-            <ol class="pay-flow">
-              <li>O app (ou o Kuruk Web) abre o botão <strong>Conectar Mercado Pago</strong>.</li>
-              <li>O lojista entra na conta dele e autoriza o aplicativo Kuruk Pay.</li>
-              <li>O Kuruk guarda o token e sincroniza os terminais Point da conta.</li>
-              <li>No PDV, a venda em débito/crédito pode ser enviada para a maquininha.</li>
-            </ol>
-            <p class="pay-sub" style="margin-top:14px">
-              Se o Mercado Pago recusar o retorno, confira se a URL acima está cadastrada no
-              aplicativo e se ele está no modo de produção correto.
-            </p>
-          </section>
+                <div class="pay-actions" style="margin-top:6px">
+                  <button class="btn" type="submit">Salvar credenciais</button>
+                </div>
+              </form>
+
+              <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+                <% if (padrao) { %>
+                  <span class="pay-sub">Este é o ambiente padrão atual.</span>
+                <% } else if (e.configured) { %>
+                  <form method="post" action="/admin/pay/environment">
+                    <input type="hidden" name="environment" value="<%= e.environment %>">
+                    <button class="btn secondary" type="submit">Usar <%= teste ? 'teste' : 'produção' %> como padrão</button>
+                  </form>
+                <% } else { %>
+                  <span class="pay-sub">Salve as credenciais para poder ativar este ambiente.</span>
+                <% } %>
+              </div>
+            </section>
+          <% }); %>
         </div>
 
         <section class="pay-card" style="margin-top:18px">
           <h2>Contas conectadas</h2>
-          <p class="hint">Tokens ficam no servidor; esta tela mostra apenas de quem é a conta.</p>
+          <p class="hint">
+            Tokens ficam no servidor; esta tela mostra apenas de quem é a conta. Cada empresa pode ter
+            uma conexão de teste e uma de produção — o botão <strong>Teste/Produção</strong> escolhe qual
+            o app e o PDV usam naquele momento.
+          </p>
           <% if (!accounts.length) { %>
             <div class="pay-empty">Nenhuma empresa conectou o Mercado Pago ainda.</div>
           <% } else { %>
             <div style="overflow-x:auto">
               <table class="pay-table">
                 <thead>
-                  <tr><th>Empresa</th><th>Conta MP</th><th>Ambiente</th><th>Pedidos</th><th>Último pedido</th><th></th></tr>
+                  <tr><th>Empresa</th><th>Conta MP</th><th>Ambiente</th><th>Ambiente da empresa</th><th>Pedidos</th><th>Último pedido</th><th></th></tr>
                 </thead>
                 <tbody>
-                  <% accounts.forEach(function (a) { %>
+                  <% accounts.forEach(function (a) {
+                       var ativo = a.active_environment || app.defaultEnvironment;
+                  %>
                     <tr>
                       <td>
                         <a href="/admin/companies/<%= a.company_uuid %>"><%= a.company_name || a.company_uuid %></a>
@@ -148,6 +174,18 @@
                       <td>
                         <span class="pill <%= a.environment === 'producao' ? 'on' : 'off' %>"><%= a.environment === 'producao' ? 'Produção' : 'Teste' %></span>
                         <% if (a.live_mode) { %><span class="pill on">live</span><% } %>
+                      </td>
+                      <td>
+                        <div class="pay-env-switch" title="Ambiente usado pelo app e pelo PDV desta empresa">
+                          <% ['teste', 'producao'].forEach(function (env) { %>
+                            <form method="post" action="/admin/pay/companies/<%= a.company_uuid %>/environment">
+                              <input type="hidden" name="environment" value="<%= env %>">
+                              <button type="submit" class="<%= ativo === env ? 'current' : '' %>" <%= ativo === env ? 'disabled' : '' %>>
+                                <%= env === 'teste' ? 'Teste' : 'Produção' %>
+                              </button>
+                            </form>
+                          <% }); %>
+                        </div>
                       </td>
                       <td><%= Number(a.orders_count || 0) %></td>
                       <td><%= a.last_order_at ? fmtDateTimeBr(a.last_order_at) : '—' %></td>

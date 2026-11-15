@@ -3,10 +3,11 @@ import { requireCompanyAuth, type AuthedRequest } from '../auth';
 import {
   PayError, buildPayAuthUrl, cancelPayOrder, consumePayOAuthState, createPayOAuthState,
   createPayOrder, disconnectPayAccount, exchangePayCode, fetchPayMe, friendlyPayMessage,
-  getActivePayAccount, getPayAccount, getPayOrderForCompany, getPayTerminals, listPayOrders,
-  loadPayAppSettings,
-  loadPayAppSettingsView, normalizePayEnvironment, payCallbackUrl, refreshPayOrderIfStale,
-  refundPayOrder, savePayAccount, serializePayOrder, setDefaultPayTerminal, syncPayTerminals,
+  getCompanyPayEnvironment, getPayAccount, getPayOrderForCompany,
+  getPayTerminals, listPayOrders, loadPayAppSettings, loadPayAppSettingsView,
+  normalizePayEnvironment, payCallbackUrl, payEnvironmentConfigured, refreshPayOrderIfStale,
+  refundPayOrder, savePayAccount, serializePayOrder, setCompanyPayEnvironment,
+  setDefaultPayTerminal, syncPayTerminals,
   type PayEnvironment, type PayOrderOrigin, type PayTerminalRow,
 } from '../pay';
 
@@ -80,9 +81,11 @@ router.get('/oauth/callback', async (req, res) => {
   }
 
   try {
-    const token = await exchangePayCode(code);
+    const token = await exchangePayCode(code, saved.environment);
     const me = await fetchPayMe(token.access_token!);
     await savePayAccount(saved.company_uuid, saved.environment, token, me);
+    // A empresa passa a operar no ambiente que acabou de autorizar.
+    await setCompanyPayEnvironment(saved.company_uuid, saved.environment);
     // Sincronizar já deixa a tela pronta; se falhar, o botão "Sincronizar" resolve.
     try {
       await syncPayTerminals(saved.company_uuid, saved.environment);
@@ -104,16 +107,21 @@ router.get('/oauth/callback', async (req, res) => {
 
 router.get('/account', requireCompanyAuth, async (req: AuthedRequest, res) => {
   const companyUuid = req.companyUuid!;
-  const requested = req.query.environment ? environmentFrom(req.query.environment) : null;
-  const account = requested ? await getPayAccount(companyUuid, requested) : await getActivePayAccount(companyUuid);
+  const activeEnv = req.query.environment
+    ? environmentFrom(req.query.environment)
+    : await getCompanyPayEnvironment(companyUuid);
+  const account = await getPayAccount(companyUuid, activeEnv);
   const app = await loadPayAppSettingsView();
+  const configured = await payEnvironmentConfigured(activeEnv);
 
   if (!account) {
     res.json({
-      configured: app.configured,
+      configured,
       connected: false,
-      environment: requested ?? 'producao',
+      environment: activeEnv,
+      defaultEnvironment: app.defaultEnvironment,
       callbackUrl: app.callbackUrl,
+      environments: app.environments.map((e) => ({ environment: e.environment, configured: e.configured })),
       account: null,
       terminals: [],
       defaultTerminalId: null,
@@ -123,10 +131,12 @@ router.get('/account', requireCompanyAuth, async (req: AuthedRequest, res) => {
 
   const terminals = await getPayTerminals(companyUuid, account.environment);
   res.json({
-    configured: app.configured,
+    configured,
     connected: Boolean(account.access_token),
     environment: account.environment,
+    defaultEnvironment: app.defaultEnvironment,
     callbackUrl: app.callbackUrl,
+    environments: app.environments.map((e) => ({ environment: e.environment, configured: e.configured })),
     account: {
       environment: account.environment,
       userId: account.mp_user_id,
@@ -142,16 +152,32 @@ router.get('/account', requireCompanyAuth, async (req: AuthedRequest, res) => {
   });
 });
 
-router.post('/account/connect', requireCompanyAuth, async (req: AuthedRequest, res) => {
-  const app = await loadPayAppSettings();
-  if (!app.clientId || !app.clientSecret) {
+/** Troca o ambiente da empresa com um clique (teste <-> produção). */
+router.post('/environment', requireCompanyAuth, async (req: AuthedRequest, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const environment = environmentFrom(body.environment);
+  // Não deixa trocar para um ambiente cujo aplicativo ainda não tem credenciais.
+  if (!(await payEnvironmentConfigured(environment))) {
     res.status(400).json({
-      error: 'O aplicativo Kuruk Pay ainda não foi configurado no servidor. Peça ao suporte para cadastrar o Client ID e o Client Secret.',
+      error: `As credenciais de ${environment === 'teste' ? 'teste' : 'produção'} do Kuruk Pay ainda não foram cadastradas no servidor.`,
     });
     return;
   }
+  await setCompanyPayEnvironment(req.companyUuid!, environment);
+  res.json({ ok: true, environment });
+});
+
+router.post('/account/connect', requireCompanyAuth, async (req: AuthedRequest, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const environment = environmentFrom(body.environment);
+  const app = await loadPayAppSettings(environment);
+  if (!app.clientId || !app.clientSecret) {
+    res.status(400).json({
+      error: `As credenciais de ${environment === 'teste' ? 'teste' : 'produção'} do Kuruk Pay ainda não foram cadastradas no servidor.`,
+    });
+    return;
+  }
+  await setCompanyPayEnvironment(req.companyUuid!, environment);
   const state = await createPayOAuthState(req.companyUuid!, environment, safeReturnUrl(body.returnUrl));
   res.json({ url: buildPayAuthUrl(state, app.clientId), state, environment, callbackUrl: payCallbackUrl() });
 });
@@ -165,9 +191,12 @@ router.post('/account/disconnect', requireCompanyAuth, async (req: AuthedRequest
 // ─────────────────────────── Terminais ───────────────────────────
 
 router.get('/terminals', requireCompanyAuth, async (req: AuthedRequest, res) => {
-  const account = await getActivePayAccount(req.companyUuid!);
+  const environment = req.query.environment
+    ? environmentFrom(req.query.environment)
+    : await getCompanyPayEnvironment(req.companyUuid!);
+  const account = await getPayAccount(req.companyUuid!, environment);
   if (!account) {
-    res.json({ terminals: [], defaultTerminalId: null, environment: environmentFrom(req.query.environment) });
+    res.json({ terminals: [], defaultTerminalId: null, environment });
     return;
   }
   const terminals = await getPayTerminals(req.companyUuid!, account.environment);
@@ -182,16 +211,18 @@ router.post('/terminals/sync', requireCompanyAuth, async (req: AuthedRequest, re
   const body = (req.body ?? {}) as Record<string, unknown>;
   const environment = body.environment
     ? environmentFrom(body.environment)
-    : (await getActivePayAccount(req.companyUuid!))?.environment;
-  if (!environment) {
+    : await getCompanyPayEnvironment(req.companyUuid!);
+  const account = await getPayAccount(req.companyUuid!, environment);
+  if (!account) {
     res.status(400).json({ error: 'Conecte a conta Mercado Pago antes de sincronizar os terminais.' });
     return;
   }
   try {
     const terminals = await syncPayTerminals(req.companyUuid!, environment);
-    const account = await getPayAccount(req.companyUuid!, environment);
+    const updated = await getPayAccount(req.companyUuid!, environment);
     res.json({
       ok: true,
+      environment,
       count: terminals.length,
       terminals: terminals.map((t) => ({
         terminalId: t.terminalId,
@@ -200,7 +231,7 @@ router.post('/terminals/sync', requireCompanyAuth, async (req: AuthedRequest, re
         storeId: t.storeId,
         operatingMode: t.operatingMode,
       })),
-      defaultTerminalId: account?.default_terminal_id ?? null,
+      defaultTerminalId: updated?.default_terminal_id ?? null,
     });
   } catch (e) {
     fail(res, e);
@@ -226,17 +257,24 @@ router.post('/terminals/default', requireCompanyAuth, async (req: AuthedRequest,
 // ─────────────────────────── Pedidos ───────────────────────────
 
 router.get('/orders', requireCompanyAuth, async (req: AuthedRequest, res) => {
-  const environment = req.query.environment ? environmentFrom(req.query.environment) : null;
+  const environment = req.query.all === '1'
+    ? null
+    : req.query.environment
+      ? environmentFrom(req.query.environment)
+      : await getCompanyPayEnvironment(req.companyUuid!);
   const limit = Number(req.query.limit ?? 25);
   const orders = await listPayOrders(req.companyUuid!, environment, Number.isFinite(limit) ? limit : 25);
-  res.json({ orders: orders.map(serializePayOrder) });
+  res.json({ orders: orders.map(serializePayOrder), environment });
 });
 
 const ORIGINS: PayOrderOrigin[] = ['pdv', 'painel', 'teste'];
 
 router.post('/orders', requireCompanyAuth, async (req: AuthedRequest, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
-  const account = await getActivePayAccount(req.companyUuid!);
+  const environment = body.environment
+    ? environmentFrom(body.environment)
+    : await getCompanyPayEnvironment(req.companyUuid!);
+  const account = await getPayAccount(req.companyUuid!, environment);
   if (!account) {
     res.status(401).json({ error: 'Conecte a conta Mercado Pago antes de cobrar na maquininha.' });
     return;
@@ -251,7 +289,7 @@ router.post('/orders', requireCompanyAuth, async (req: AuthedRequest, res) => {
   try {
     const order = await createPayOrder({
       companyUuid: req.companyUuid!,
-      environment: account.environment,
+      environment,
       origin,
       amountCents,
       description: String(body.description ?? '').trim() || null,

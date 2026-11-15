@@ -22,9 +22,14 @@ import { getPool } from './db';
 export const PAY_API_BASE = (process.env.MP_PAY_API_BASE ?? 'https://api.mercadopago.com').replace(/\/+$/, '');
 export const PAY_AUTH_BASE = (process.env.MP_PAY_AUTH_BASE ?? 'https://auth.mercadopago.com.br').replace(/\/+$/, '');
 
+const KEY_ENVIRONMENT = 'pay_environment';
 const KEY_CLIENT_ID = 'pay_client_id';
 const KEY_CLIENT_SECRET = 'pay_client_secret';
 const KEY_WEBHOOK_SECRET = 'pay_webhook_secret';
+/** Credenciais do APLICATIVO de teste, separadas das de produção. */
+const KEY_TEST_CLIENT_ID = 'pay_client_id_teste';
+const KEY_TEST_CLIENT_SECRET = 'pay_client_secret_teste';
+const KEY_TEST_WEBHOOK_SECRET = 'pay_webhook_secret_teste';
 
 export type PayEnvironment = 'teste' | 'producao';
 export type PayOrderOrigin = 'pdv' | 'painel' | 'teste';
@@ -63,22 +68,38 @@ export function friendlyPayMessage(error: unknown): string {
 // ─────────────────────────── Configuração do aplicativo ───────────────────────────
 
 export interface PayAppSettings {
+  environment: PayEnvironment;
   clientId: string;
   clientSecret: string;
   webhookSecret: string;
 }
 
-export interface PayAppSettingsView {
+export interface PayEnvironmentSettingsView {
+  environment: PayEnvironment;
   configured: boolean;
+  clientId: string;
+  clientSecretSet: boolean;
+  webhookSecretSet: boolean;
+}
+
+export interface PayAppSettingsView {
+  /** Configuração do ambiente PADRÃO (o que a tela antiga mostrava). */
+  configured: boolean;
+  defaultEnvironment: PayEnvironment;
   clientId: string;
   clientSecretSet: boolean;
   webhookSecretSet: boolean;
   callbackUrl: string;
   apiBase: string;
+  environments: PayEnvironmentSettingsView[];
 }
 
 async function readAppSettings(): Promise<Record<string, string>> {
-  const keys = [KEY_CLIENT_ID, KEY_CLIENT_SECRET, KEY_WEBHOOK_SECRET];
+  const keys = [
+    KEY_ENVIRONMENT,
+    KEY_CLIENT_ID, KEY_CLIENT_SECRET, KEY_WEBHOOK_SECRET,
+    KEY_TEST_CLIENT_ID, KEY_TEST_CLIENT_SECRET, KEY_TEST_WEBHOOK_SECRET,
+  ];
   const [rows] = await getPool().query(
     `SELECT setting_key, setting_value FROM app_settings
       WHERE setting_key IN (${keys.map(() => '?').join(',')})`,
@@ -91,41 +112,124 @@ async function readAppSettings(): Promise<Record<string, string>> {
   return out;
 }
 
-export async function loadPayAppSettings(): Promise<PayAppSettings> {
+/** Credenciais do aplicativo para UM ambiente. Teste e produção são independentes. */
+export async function loadPayAppSettings(
+  environment: PayEnvironment = 'producao',
+): Promise<PayAppSettings> {
   const raw = await readAppSettings();
+  const teste = environment === 'teste';
+  if (teste) {
+    return {
+      environment,
+      clientId: raw[KEY_TEST_CLIENT_ID] || (process.env.MP_PAY_CLIENT_ID_TESTE ?? '').trim(),
+      clientSecret: raw[KEY_TEST_CLIENT_SECRET] || (process.env.MP_PAY_CLIENT_SECRET_TESTE ?? '').trim(),
+      webhookSecret: raw[KEY_TEST_WEBHOOK_SECRET] || (process.env.MP_PAY_WEBHOOK_SECRET_TESTE ?? '').trim(),
+    };
+  }
   return {
+    environment,
     clientId: raw[KEY_CLIENT_ID] || (process.env.MP_PAY_CLIENT_ID ?? '').trim(),
     clientSecret: raw[KEY_CLIENT_SECRET] || (process.env.MP_PAY_CLIENT_SECRET ?? '').trim(),
     webhookSecret: raw[KEY_WEBHOOK_SECRET] || (process.env.MP_PAY_WEBHOOK_SECRET ?? '').trim(),
   };
 }
 
+const PAY_ENVIRONMENTS: PayEnvironment[] = ['producao', 'teste'];
+
 export async function loadPayAppSettingsView(): Promise<PayAppSettingsView> {
-  const s = await loadPayAppSettings();
+  const raw = await readAppSettings();
+  const defaultEnvironment = normalizePayEnvironment(raw[KEY_ENVIRONMENT]);
+
+  const environments = await Promise.all(PAY_ENVIRONMENTS.map(async (env): Promise<PayEnvironmentSettingsView> => {
+    const s = await loadPayAppSettings(env);
+    return {
+      environment: env,
+      configured: Boolean(s.clientId && s.clientSecret),
+      clientId: s.clientId,
+      clientSecretSet: Boolean(s.clientSecret),
+      webhookSecretSet: Boolean(s.webhookSecret),
+    };
+  }));
+  const active = environments.find((e) => e.environment === defaultEnvironment)!;
+
   return {
-    configured: Boolean(s.clientId && s.clientSecret),
-    clientId: s.clientId,
-    clientSecretSet: Boolean(s.clientSecret),
-    webhookSecretSet: Boolean(s.webhookSecret),
+    configured: active.configured,
+    defaultEnvironment,
+    clientId: active.clientId,
+    clientSecretSet: active.clientSecretSet,
+    webhookSecretSet: active.webhookSecretSet,
     callbackUrl: payCallbackUrl(),
     apiBase: PAY_API_BASE,
+    environments,
   };
 }
 
 /** Campo de segredo em branco MANTÉM o que já está salvo (mesma regra do SMTP/gateway). */
-export async function savePayAppSettings(body: Record<string, unknown>): Promise<void> {
+export async function savePayAppSettings(
+  environment: PayEnvironment,
+  body: Record<string, unknown>,
+): Promise<void> {
   const upsert = (key: string, value: string | null) =>
     getPool().query(
       `INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
       [key, value],
     );
+  const teste = environment === 'teste';
+  const clientIdKey = teste ? KEY_TEST_CLIENT_ID : KEY_CLIENT_ID;
+  const clientSecretKey = teste ? KEY_TEST_CLIENT_SECRET : KEY_CLIENT_SECRET;
+  const webhookKey = teste ? KEY_TEST_WEBHOOK_SECRET : KEY_WEBHOOK_SECRET;
+
   const clientId = String(body.clientId ?? '').trim();
-  if (clientId) await upsert(KEY_CLIENT_ID, clientId);
+  if (clientId) await upsert(clientIdKey, clientId);
   const secret = String(body.clientSecret ?? '').trim();
-  if (secret) await upsert(KEY_CLIENT_SECRET, secret);
+  if (secret) await upsert(clientSecretKey, secret);
   const webhook = String(body.webhookSecret ?? '').trim();
-  if (webhook) await upsert(KEY_WEBHOOK_SECRET, webhook);
+  if (webhook) await upsert(webhookKey, webhook);
+}
+
+/** Troca o ambiente PADRÃO (empresas que ainda não escolheram o próprio). */
+export async function setPayDefaultEnvironment(environment: PayEnvironment): Promise<boolean> {
+  const s = await loadPayAppSettings(environment);
+  if (!s.clientId || !s.clientSecret) return false;
+  await getPool().query(
+    `INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+    [KEY_ENVIRONMENT, environment],
+  );
+  return true;
+}
+
+export async function getPayDefaultEnvironment(): Promise<PayEnvironment> {
+  const raw = await readAppSettings();
+  return normalizePayEnvironment(raw[KEY_ENVIRONMENT]);
+}
+
+/** Escolha explícita da empresa; se não houver, vale o padrão global. */
+export async function getCompanyPayEnvironment(companyUuid: string): Promise<PayEnvironment> {
+  const [rows] = await getPool().query(
+    'SELECT active_environment FROM pay_company_settings WHERE company_uuid = ? LIMIT 1',
+    [companyUuid],
+  );
+  const row = (rows as { active_environment: PayEnvironment }[])[0];
+  if (row) return normalizePayEnvironment(row.active_environment);
+  return getPayDefaultEnvironment();
+}
+
+export async function setCompanyPayEnvironment(
+  companyUuid: string,
+  environment: PayEnvironment,
+): Promise<void> {
+  await getPool().query(
+    `INSERT INTO pay_company_settings (company_uuid, active_environment) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE active_environment = VALUES(active_environment)`,
+    [companyUuid, environment],
+  );
+}
+
+export async function payEnvironmentConfigured(environment: PayEnvironment): Promise<boolean> {
+  const s = await loadPayAppSettings(environment);
+  return Boolean(s.clientId && s.clientSecret);
 }
 
 export function payCallbackUrl(): string {
@@ -169,13 +273,12 @@ export async function getPayAccount(
 }
 
 /** Conta ativa de uma empresa: prefere produção; teste só aparece se for a única. */
-export async function getActivePayAccount(companyUuid: string): Promise<PayAccountRow | null> {
-  const [rows] = await getPool().query(
-    `SELECT * FROM pay_accounts WHERE company_uuid = ?
-      ORDER BY (environment = 'producao') DESC, connected_at DESC LIMIT 1`,
-    [companyUuid],
-  );
-  return ((rows as PayAccountRow[])[0]) ?? null;
+export async function getActivePayAccount(
+  companyUuid: string,
+  environment?: PayEnvironment,
+): Promise<PayAccountRow | null> {
+  const env = environment ?? await getCompanyPayEnvironment(companyUuid);
+  return getPayAccount(companyUuid, env);
 }
 
 interface OAuthTokenResponse {
@@ -321,10 +424,13 @@ function tokenErrorMessage(json: Record<string, unknown> | null, status: number)
   return `Mercado Pago recusou a autorização (HTTP ${status})${err ? `: ${err}` : ''}${msg ? ` — ${msg}` : ''}`;
 }
 
-export async function exchangePayCode(code: string): Promise<OAuthTokenResponse> {
-  const app = await loadPayAppSettings();
+export async function exchangePayCode(
+  code: string,
+  environment: PayEnvironment,
+): Promise<OAuthTokenResponse> {
+  const app = await loadPayAppSettings(environment);
   if (!app.clientId || !app.clientSecret) {
-    throw new PayError('O aplicativo Kuruk Pay ainda não foi configurado no servidor.');
+    throw new PayError(`O aplicativo Kuruk Pay não está configurado no ambiente de ${environment === 'teste' ? 'teste' : 'produção'}.`);
   }
   const res = await fetch(`${PAY_API_BASE}/oauth/token`, {
     method: 'POST',
@@ -357,9 +463,9 @@ export async function fetchPayMe(accessToken: string): Promise<PayMe | null> {
 }
 
 async function refreshPayToken(row: PayAccountRow): Promise<string> {
-  const app = await loadPayAppSettings();
+  const app = await loadPayAppSettings(row.environment);
   if (!row.refresh_token) throw new PayError('A conexão com o Mercado Pago expirou. Conecte novamente.');
-  if (!app.clientId || !app.clientSecret) throw new PayError('O aplicativo Kuruk Pay não está configurado.');
+  if (!app.clientId || !app.clientSecret) throw new PayError('O aplicativo Kuruk Pay não está configurado neste ambiente.');
   const res = await fetch(`${PAY_API_BASE}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -993,19 +1099,21 @@ export async function handlePayOrderNotification(
 
 export interface PayAccountAdminRow extends PayAccountRow {
   company_name: string | null;
+  active_environment: PayEnvironment | null;
   orders_count: number;
   last_order_at: string | Date | null;
 }
 
 export async function listPayAccountsForAdmin(): Promise<PayAccountAdminRow[]> {
   const [rows] = await getPool().query(
-    `SELECT a.*, c.name AS company_name,
+    `SELECT a.*, c.name AS company_name, cs.active_environment AS active_environment,
             (SELECT COUNT(*) FROM pay_orders o WHERE o.company_uuid = a.company_uuid
                AND o.environment = a.environment) AS orders_count,
             (SELECT MAX(o.created_at) FROM pay_orders o WHERE o.company_uuid = a.company_uuid
                AND o.environment = a.environment) AS last_order_at
        FROM pay_accounts a
        LEFT JOIN companies c ON c.company_uuid = a.company_uuid
+       LEFT JOIN pay_company_settings cs ON cs.company_uuid = a.company_uuid
       ORDER BY a.connected_at DESC, a.company_uuid`,
   );
   return rows as PayAccountAdminRow[];

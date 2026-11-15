@@ -3,9 +3,10 @@ import { requireMobileAuth, type MobileRequest } from '../mobileAuth';
 import { dataFreshness } from '../mobileData';
 import {
   PayError, buildPayAuthUrl, cancelPayOrder, createPayOAuthState, createPayOrder,
-  disconnectPayAccount, friendlyPayMessage, getActivePayAccount, getPayOrderForCompany,
-  getPayTerminals, listPayOrders, loadPayAppSettings, loadPayAppSettingsView,
-  normalizePayEnvironment, refreshPayOrderIfStale, refundPayOrder, serializePayOrder,
+  disconnectPayAccount, friendlyPayMessage, getCompanyPayEnvironment, getPayAccount,
+  getPayOrderForCompany, getPayTerminals, listPayOrders, loadPayAppSettings,
+  loadPayAppSettingsView, normalizePayEnvironment, payEnvironmentConfigured,
+  refreshPayOrderIfStale, refundPayOrder, serializePayOrder, setCompanyPayEnvironment,
   setDefaultPayTerminal, syncPayTerminals, type PayEnvironment,
 } from '../pay';
 
@@ -64,12 +65,14 @@ function brl(cents: number): string {
 router.get('/', async (req: MobileRequest, res) => {
   if (bloquear(req, res)) return;
   const companyUuid = req.grant!.companyUuid;
-  const account = await getActivePayAccount(companyUuid);
+  const environment = req.query.environment
+    ? normalizePayEnvironment(req.query.environment)
+    : await getCompanyPayEnvironment(companyUuid);
+  const account = await getPayAccount(companyUuid, environment);
   const app = await loadPayAppSettingsView();
-  const environment: PayEnvironment = account?.environment
-    ?? normalizePayEnvironment(req.query.environment);
+  const envConfigured = await payEnvironmentConfigured(environment);
   const terminals = account ? await getPayTerminals(companyUuid, account.environment) : [];
-  const orders = await listPayOrders(companyUuid, null, 12);
+  const orders = await listPayOrders(companyUuid, environment, 12);
 
   res.render('pay-mobile', {
     titulo: 'Kuruk Pay',
@@ -77,6 +80,7 @@ router.get('/', async (req: MobileRequest, res) => {
     fresh: await dataFreshness(companyUuid),
     ativo: 'pay',
     app,
+    envConfigured,
     account: account ? {
       environment: account.environment,
       email: account.email,
@@ -107,14 +111,33 @@ router.get('/', async (req: MobileRequest, res) => {
   });
 });
 
-router.post('/conectar', async (req: MobileRequest, res) => {
+/** Troca o ambiente da loja com um clique (teste <-> produção). */
+router.post('/ambiente', async (req: MobileRequest, res) => {
   if (bloquear(req, res, 'gerenciar')) return;
-  const app = await loadPayAppSettings();
-  if (!app.clientId || !app.clientSecret) {
-    res.redirect('/m/pay?erro=' + encodeURIComponent('O Kuruk Pay ainda não foi configurado pelo suporte.'));
+  const environment = normalizePayEnvironment((req.body ?? {}).environment);
+  if (!(await payEnvironmentConfigured(environment))) {
+    res.redirect('/m/pay?erro=' + encodeURIComponent(
+      `O suporte ainda não cadastrou as credenciais de ${environment === 'teste' ? 'teste' : 'produção'}.`,
+    ));
     return;
   }
+  await setCompanyPayEnvironment(req.grant!.companyUuid, environment);
+  res.redirect('/m/pay?ok=' + encodeURIComponent(
+    `Ambiente de ${environment === 'teste' ? 'teste' : 'produção'} ativado.`,
+  ));
+});
+
+router.post('/conectar', async (req: MobileRequest, res) => {
+  if (bloquear(req, res, 'gerenciar')) return;
   const environment = normalizePayEnvironment((req.body ?? {}).environment);
+  const app = await loadPayAppSettings(environment);
+  if (!app.clientId || !app.clientSecret) {
+    res.redirect('/m/pay?erro=' + encodeURIComponent(
+      `O suporte ainda não cadastrou as credenciais de ${environment === 'teste' ? 'teste' : 'produção'}.`,
+    ));
+    return;
+  }
+  await setCompanyPayEnvironment(req.grant!.companyUuid, environment);
   const state = await createPayOAuthState(req.grant!.companyUuid, environment, '/m/pay');
   res.redirect(buildPayAuthUrl(state, app.clientId));
 });
@@ -128,13 +151,15 @@ router.post('/desconectar', async (req: MobileRequest, res) => {
 
 router.post('/terminais/sincronizar', async (req: MobileRequest, res) => {
   if (bloquear(req, res, 'gerenciar')) return;
-  const account = await getActivePayAccount(req.grant!.companyUuid);
+  const companyUuid = req.grant!.companyUuid;
+  const environment = await getCompanyPayEnvironment(companyUuid);
+  const account = await getPayAccount(companyUuid, environment);
   if (!account) {
     res.redirect('/m/pay?erro=' + encodeURIComponent('Conecte a conta Mercado Pago primeiro.'));
     return;
   }
   try {
-    const terminals = await syncPayTerminals(req.grant!.companyUuid, account.environment);
+    const terminals = await syncPayTerminals(companyUuid, environment);
     res.redirect('/m/pay?ok=' + encodeURIComponent(
       terminals.length
         ? `${terminals.length} terminal(is) sincronizado(s).`
@@ -147,14 +172,16 @@ router.post('/terminais/sincronizar', async (req: MobileRequest, res) => {
 
 router.post('/terminal-padrao', async (req: MobileRequest, res) => {
   if (bloquear(req, res, 'gerenciar')) return;
-  const account = await getActivePayAccount(req.grant!.companyUuid);
+  const companyUuid = req.grant!.companyUuid;
+  const environment = await getCompanyPayEnvironment(companyUuid);
+  const account = await getPayAccount(companyUuid, environment);
   if (!account) {
     res.redirect('/m/pay?erro=' + encodeURIComponent('Conecte a conta Mercado Pago primeiro.'));
     return;
   }
   const terminalId = String((req.body ?? {}).terminalId ?? '').trim();
   const ok = terminalId
-    ? await setDefaultPayTerminal(req.grant!.companyUuid, account.environment, terminalId)
+    ? await setDefaultPayTerminal(companyUuid, environment, terminalId)
     : false;
   res.redirect('/m/pay?' + (ok
     ? 'ok=' + encodeURIComponent('Terminal padrão atualizado.')
@@ -163,7 +190,9 @@ router.post('/terminal-padrao', async (req: MobileRequest, res) => {
 
 router.post('/cobrar', async (req: MobileRequest, res) => {
   if (bloquear(req, res, 'cobrar')) return;
-  const account = await getActivePayAccount(req.grant!.companyUuid);
+  const companyUuid = req.grant!.companyUuid;
+  const environment = await getCompanyPayEnvironment(companyUuid);
+  const account = await getPayAccount(companyUuid, environment);
   if (!account) {
     res.redirect('/m/pay?erro=' + encodeURIComponent('Conecte a conta Mercado Pago primeiro.'));
     return;
@@ -175,8 +204,8 @@ router.post('/cobrar', async (req: MobileRequest, res) => {
   }
   try {
     const order = await createPayOrder({
-      companyUuid: req.grant!.companyUuid,
-      environment: account.environment,
+      companyUuid,
+      environment,
       origin: 'teste',
       amountCents,
       description: String((req.body ?? {}).description ?? '').trim() || 'Cobrança de teste Kuruk Pay',

@@ -35,6 +35,10 @@
   @keyframes paym-spin { to { transform: rotate(360deg); } }
   .paym-watch strong { font-size: .95rem; }
   .paym-watch p { margin: 6px 0 0; color: var(--m-muted, #6b7280); font-size: .78rem; }
+  .paym-env { display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--m-surface-hover, #f3f4f6); }
+  .paym-env form { margin: 0; }
+  .paym-env button { border: 0; background: transparent; padding: 5px 10px; border-radius: 7px; font-size: .72rem; font-weight: 800; color: var(--m-muted, #6b7280); }
+  .paym-env button.current { background: #fff; color: var(--m-primary, #ff8000); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 </style>
 
 <div class="paym-hero">
@@ -60,6 +64,35 @@
 <% if (pay === 'cancelado') { %><div class="paym-alert warn">A autorização foi cancelada no Mercado Pago.</div><% } %>
 <% if (pay === 'erro') { %><div class="paym-alert err">Não foi possível concluir a conexão. Tente de novo.</div><% } %>
 
+<section class="paym-card" style="padding:12px 14px">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span class="paym-sub" style="margin:0;flex:1">
+      Ambiente da loja
+      <strong style="display:block;color:inherit;font-size:.9rem"><%= environment === 'teste' ? 'Teste (sandbox)' : 'Produção (dinheiro real)' %></strong>
+    </span>
+    <% if (canManage) { %>
+      <div class="paym-env">
+        <form method="post" action="/m/pay/ambiente">
+          <input type="hidden" name="environment" value="teste" />
+          <button type="submit" class="<%= environment === 'teste' ? 'current' : '' %>" <%= environment === 'teste' ? 'disabled' : '' %>>Teste</button>
+        </form>
+        <form method="post" action="/m/pay/ambiente">
+          <input type="hidden" name="environment" value="producao" />
+          <button type="submit" class="<%= environment === 'producao' ? 'current' : '' %>" <%= environment === 'producao' ? 'disabled' : '' %>>Produção</button>
+        </form>
+      </div>
+    <% } else { %>
+      <span class="paym-chip <%= environment === 'teste' ? 'warn' : 'on' %>"><%= environment === 'teste' ? 'Teste' : 'Produção' %></span>
+    <% } %>
+  </div>
+</section>
+
+<% if (environment === 'teste') { %>
+  <div class="paym-alert warn">
+    <strong>Modo de teste ativo.</strong> Nenhum valor real é cobrado. Use conta e terminal de teste do Mercado Pago.
+  </div>
+<% } %>
+
 <% if (pedido) { %>
   <section class="paym-card paym-watch" id="paym-watch" data-uuid="<%= pedido %>">
     <div class="paym-watch-head">
@@ -77,26 +110,22 @@
   </section>
 <% } %>
 
-<% if (!app.configured) { %>
+<% if (!envConfigured) { %>
   <div class="paym-alert warn">
-    O Kuruk Pay ainda não foi liberado nesta instalação. Peça ao suporte para cadastrar o
-    aplicativo Mercado Pago no painel do Kuruk.
+    O Kuruk Pay ainda não tem credenciais de <strong><%= environment === 'teste' ? 'teste' : 'produção' %></strong>
+    cadastradas. Peça ao suporte para configurar no painel do Kuruk ou troque de ambiente acima.
   </div>
 <% } else if (!account) { %>
   <section class="paym-card">
-    <h3>Conectar Mercado Pago</h3>
+    <h3>Conectar Mercado Pago · <%= environment === 'teste' ? 'Teste' : 'Produção' %></h3>
     <p class="paym-sub">
       Você será levado ao site do Mercado Pago para entrar na conta da loja e autorizar o Kuruk Pay.
       É a conta que recebe o dinheiro e onde os terminais Point estão cadastrados.
     </p>
     <% if (canManage) { %>
       <form method="post" action="/m/pay/conectar" class="m-field">
-        <label for="paym-env">Ambiente</label>
-        <select id="paym-env" name="environment">
-          <option value="producao" selected>Produção (conta real)</option>
-          <option value="teste">Teste (usuário de teste)</option>
-        </select>
-        <button class="m-btn" type="submit" style="margin-top:12px">Conectar Mercado Pago</button>
+        <input type="hidden" name="environment" value="<%= environment %>" />
+        <button class="m-btn" type="submit">Conectar Mercado Pago (<%= environment === 'teste' ? 'teste' : 'produção' %>)</button>
       </form>
     <% } else { %>
       <p class="paym-sub">Peça a um administrador da loja para conectar a conta Mercado Pago.</p>
@@ -163,8 +192,12 @@
 
   <% if (terminals.length && canCharge) { %>
     <section class="paym-card">
-      <h3>Cobrança de teste</h3>
-      <p class="paym-sub">Envie um valor para a maquininha e confirme o recebimento antes de usar no PDV.</p>
+      <h3><%= environment === 'teste' ? 'Cobrança de teste' : 'Cobrança avulsa' %></h3>
+      <p class="paym-sub">
+        <%= environment === 'teste'
+          ? 'Envie um valor para o terminal de teste e confirme o recebimento antes de usar no PDV.'
+          : 'Atenção: no ambiente de produção esta cobrança é REAL e cai na conta da loja.' %>
+      </p>
       <form method="post" action="/m/pay/cobrar">
         <div class="m-field">
           <label for="paym-amount">Valor</label>
@@ -172,7 +205,7 @@
         </div>
         <div class="m-field">
           <label for="paym-desc">Descrição</label>
-          <input id="paym-desc" name="description" maxlength="120" placeholder="Cobrança de teste" />
+          <input id="paym-desc" name="description" maxlength="120" placeholder="<%= environment === 'teste' ? 'Cobrança de teste' : 'Cobrança avulsa' %>" />
         </div>
         <div class="m-field">
           <label for="paym-terminal">Terminal</label>
@@ -182,7 +215,7 @@
             <% }) %>
           </select>
         </div>
-        <button class="m-btn" type="submit" style="margin-top:12px">Enviar para a maquininha</button>
+        <button class="m-btn" type="submit" style="margin-top:12px"><%= environment === 'teste' ? 'Enviar cobrança de teste' : 'Enviar cobrança real' %></button>
       </form>
     </section>
   <% } %>

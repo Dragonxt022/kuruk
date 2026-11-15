@@ -37,7 +37,26 @@ No painel de aplicações do Mercado Pago, no app **Kuruk-Pay** (App ID `5049718
   volta para a tela).
 
 Fallback por variáveis de ambiente do cloud: `MP_PAY_CLIENT_ID`, `MP_PAY_CLIENT_SECRET`,
-`MP_PAY_WEBHOOK_SECRET`, `MP_PAY_REDIRECT_URL`.
+`MP_PAY_WEBHOOK_SECRET`, `MP_PAY_REDIRECT_URL`. Para teste: `MP_PAY_CLIENT_ID_TESTE`,
+`MP_PAY_CLIENT_SECRET_TESTE`, `MP_PAY_WEBHOOK_SECRET_TESTE`.
+
+## Ambientes: teste x produção (um clique)
+
+As credenciais do **aplicativo** são guardadas em dois conjuntos independentes:
+
+- `pay_client_id` / `pay_client_secret` — produção;
+- `pay_client_id_teste` / `pay_client_secret_teste` — teste/sandbox.
+
+Cada empresa tem sua escolha em `pay_company_settings.active_environment`. O padrão
+(`pay_environment`) vale para quem ainda não escolheu. A troca acontece em:
+
+- **Admin** `/admin/pay`: “Usar como padrão” (global) ou o seletor Teste/Produção na linha da empresa;
+- **App** `/app/kuruk-pay`: seletor no topo;
+- **Kuruk Web** `/m/pay`: seletor no topo.
+
+Trocar o ambiente **não apaga** a conexão do outro: cada ambiente tem sua própria conta,
+terminal padrão e histórico. O PDV usa o ambiente ativo da empresa e mostra um selo `TESTE`
+quando não é produção.
 
 ## Banco (cloud)
 
@@ -47,6 +66,11 @@ Migration `0057_kuruk_pay`:
 - `pay_accounts` — token/refresh por empresa + ambiente; terminal padrão.
 - `pay_terminals` — terminais Point sincronizados.
 - `pay_orders` — cobranças enviadas (auditoria e reconciliação).
+
+Migration `0058_kuruk_pay_environments`:
+
+- `pay_company_settings` — ambiente ativo explícito de cada empresa.
+- `pay_environment` em `app_settings` — ambiente padrão.
 
 No desktop, a migration `0098_sale_payments_point` adiciona ao `sale_payments`:
 `point_order_uuid`, `point_brand`, `point_installments`, `point_payment_type`.
@@ -58,6 +82,7 @@ No desktop, a migration `0098_sale_payments_point` adiciona ao `sale_payments`:
 | Método | Rota | Uso |
 | --- | --- | --- |
 | GET | `/account` | estado da conexão + terminais |
+| POST | `/environment` | troca teste/produção da empresa |
 | POST | `/account/connect` | devolve a URL do OAuth |
 | POST | `/account/disconnect` | remove token da empresa |
 | GET | `/terminals` | terminais salvos |

@@ -3,7 +3,7 @@ import { requirePermission } from '../../core/permissions/middleware';
 import {
   cancelPointOrder, connectPayAccount, createPointOrder, disconnectPayAccount,
   fetchPayAccount, fetchPayOrders, fetchPointConfig, getPointOrder, refundPointOrder,
-  setDefaultPayTerminal, syncPayTerminals, type PayResult,
+  setDefaultPayTerminal, switchPayEnvironment, syncPayTerminals, type PayResult,
 } from './cloud';
 
 /**
@@ -55,6 +55,12 @@ router.post('/account/connect', requirePermission('kurukpay.settings.manage'), a
   send(res, await connectPayAccount(environment));
 });
 
+/** Troca o ambiente da empresa (teste <-> produção) com um clique. */
+router.post('/environment', requirePermission('kurukpay.settings.manage'), async (req, res) => {
+  const environment = (req.body ?? {}).environment === 'teste' ? 'teste' : 'producao';
+  send(res, await switchPayEnvironment(environment));
+});
+
 router.post('/account/disconnect', requirePermission('kurukpay.settings.manage'), async (req, res) => {
   const environment = (req.body ?? {}).environment === 'teste' ? 'teste' : 'producao';
   send(res, await disconnectPayAccount(environment));
@@ -97,6 +103,7 @@ router.post('/orders', requireCharge, async (req, res) => {
     terminalId: body.terminalId ? String(body.terminalId) : null,
     origin,
     saleUuid: body.saleUuid ? String(body.saleUuid).slice(0, 36) : null,
+    environment: body.environment === 'teste' ? 'teste' : body.environment === 'producao' ? 'producao' : undefined,
   }));
 });
 

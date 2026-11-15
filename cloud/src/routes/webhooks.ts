@@ -61,13 +61,25 @@ router.post('/mercadopago', async (req, res) => {
   // Kuruk Pay (maquininha Point): o pedido pertence a UMA empresa, então a assinatura
   // usada é a do aplicativo Kuruk Pay e o estado é relido com o token daquela empresa.
   if (tipo === 'order' || String(body.action ?? '').startsWith('order.')) {
-    const payApp = await loadPayAppSettings();
-    const assinaturaPay = verifyWebhookSignature({
-      xSignature: req.header('x-signature'),
-      xRequestId: req.header('x-request-id'),
-      dataId,
-      secret: payApp.webhookSecret,
-    });
+    // Teste e produção podem ter segredos de webhook diferentes (credenciais distintas do
+    // mesmo aplicativo). Aceita se QUALQUER um dos dois validar; o status é relido com o
+    // token da empresa de qualquer forma.
+    const [prod, teste] = await Promise.all([
+      loadPayAppSettings('producao'),
+      loadPayAppSettings('teste'),
+    ]);
+    const secrets = [prod.webhookSecret, teste.webhookSecret].filter(Boolean);
+    let assinaturaPay: boolean | null = secrets.length ? false : null;
+    for (const secret of secrets) {
+      const r = verifyWebhookSignature({
+        xSignature: req.header('x-signature'),
+        xRequestId: req.header('x-request-id'),
+        dataId,
+        secret,
+      });
+      if (r === true) { assinaturaPay = true; break; }
+      if (r === null) assinaturaPay = null;
+    }
     if (assinaturaPay === false) {
       log('assinatura inválida no pedido Kuruk Pay — notificação recusada', { dataId });
       res.sendStatus(401);
