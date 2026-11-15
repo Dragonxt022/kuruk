@@ -29,15 +29,81 @@ MAX_CTX_CHARS="${OLD_AI_MAX_CTX:-6000}"
 PERGUNTA="${*:-Faca um diagnostico geral do servidor e diga o que merece atencao agora.}"
 
 collect_context() {
-  echo "DATA: $(date '+%Y-%m-%d %H:%M')"
-  echo "CARGA:$(cut -d' ' -f1-3 /proc/loadavg) em $(nproc) vCPU"
+  local agora carga total ok parados ready health sse=0 quic=0 inv=0 detalhes=""
+  local kuma_down nd_warn veredito c l
+
+  agora="$(date '+%Y-%m-%d %H:%M')"
+  carga="$(cut -d' ' -f1-3 /proc/loadavg)"
+
+  # ---- containers ----
+  local lista
+  lista="$(docker ps --format '{{.Names}}={{.Status}}' 2>/dev/null)"
+  total="$(printf '%s\n' "$lista" | grep -c . || true)"
+  ok="$(printf '%s\n' "$lista" | grep -c '=Up ' || true)"
+  parados="$(printf '%s\n' "$lista" | grep -v '=Up ' | cut -d= -f1 | tr '\n' ' ' | sed 's/ $//')"
+
+  # ---- tunel ----
+  ready="$(docker exec old-home wget -q -T 5 -O- http://cloudflared:20241/ready 2>/dev/null \
+           | sed -n 's/.*"readyConnections":\([0-9]*\).*/\1/p')"
+  [ -z "$ready" ] && ready=0
+
+  # ---- api publica ----
+  health="$(curl -s -m 8 -o /dev/null -w '%{http_code}' https://kuruk.com.br/api/health 2>/dev/null)"
+  [ -z "$health" ] && health=000
+
+  # ---- erros classificados (ultima hora) ----
+  for c in kuruk-cloud mysql uptime-kuma cloudflared; do
+    while IFS= read -r l; do
+      [ -z "$l" ] && continue
+      case "$l" in
+        *commands/events*|*"unexpected EOF"*|*"canceled by remote with error code 0"*|*originService=http://old-home:80*)
+          sse=$((sse + 1)) ;;
+        *"no recent network activity"*|*"Failed to dial a quic"*|*"accept stream listener"*|*"datagram manager"*)
+          quic=$((quic + 1)) ;;
+        *)
+          inv=$((inv + 1))
+          detalhes+="  [$c] $(printf '%s' "$l" | cut -c1-150)"$'\n' ;;
+      esac
+    done < <(docker logs --since 60m "$c" 2>&1 | grep -iE "error|fatal|failed" | tail -20)
+  done
+
+  # ---- monitores e alarmes ----
+  kuma_down="$(docker exec -u node uptime-kuma sqlite3 /app/data/kuma.db "
+    select count(*) from (
+      select m.id, (select status from heartbeat where monitor_id = m.id order by time desc limit 1) s
+      from monitor m where m.active = 1
+    ) where s = 0;" 2>/dev/null | tr -dc '0-9')"
+  [ -z "$kuma_down" ] && kuma_down=0
+
+  nd_warn="$(curl -s -m 5 'http://127.0.0.1:19999/api/v1/alarms?all' 2>/dev/null \
+    | grep -cE '"status": ?"(WARNING|CRITICAL)"' || true)"
+  [ -z "$nd_warn" ] && nd_warn=0
+
+  # ---- veredito calculado por regras (o modelo so precisa relatar) ----
+  veredito=""
+  [ "$ok" -lt "$total" ] && veredito+="containers parados: ${parados:-?}; "
+  [ "$ready" -lt 2 ] && veredito+="tunel com apenas $ready conexao(oes); "
+  [ "$health" != "200" ] && veredito+="api publica HTTP $health; "
+  [ "$inv" -gt 0 ] && veredito+="$inv erro(s) sem classificacao conhecida; "
+  [ "$kuma_down" -gt 0 ] && veredito+="$kuma_down monitor(es) DOWN no Kuma; "
+  [ "$nd_warn" -gt 0 ] && veredito+="$nd_warn alarme(s) WARNING/CRITICAL no Netdata; "
+  [ -z "$veredito" ] && veredito="nenhum problema real detectado"
+
+  echo "DATA: $agora"
+  echo "VEREDITO AUTOMATICO (calculado por regras): $veredito"
+  echo "  containers: $ok/$total no ar"
+  echo "  tunel cloudflared: $ready conexao(oes) ativas (ok a partir de 2)"
+  echo "  api publica: HTTP $health"
+  echo "  erros 60min: $sse benignos de SSE, $quic reconexoes QUIC, $inv para investigar"
+  echo "  monitores Kuma DOWN: $kuma_down"
+  echo "  alarmes Netdata WARNING/CRITICAL: $nd_warn"
+  echo
+  echo "CARGA: $carga em $(nproc) vCPU"
   echo "RAM: $(free -m | awk '/^Mem:/{print $3"MB usados de "$2"MB"}') | swap: $(free -m | awk '/^Swap:/{print $3"MB de "$2"MB"}')"
   echo "DISCO: $(df -h / | awk 'NR==2{print $3" usados de "$2" ("$5")"}')"
   echo
   echo "CONTAINERS:"
-  docker ps --format '{{.Names}}={{.Status}}' 2>/dev/null | sed 's/^/  /' || true
-  echo "CONSUMO:"
-  docker stats --no-stream --format '  {{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}' 2>/dev/null || true
+  printf '%s\n' "$lista" | sed 's/^/  /'
   echo
   echo "ALARMES NETDATA (diferentes de CLEAR):"
   curl -s -m 5 "http://127.0.0.1:19999/api/v1/alarms?all" | /usr/bin/python3 -c '
@@ -47,7 +113,7 @@ try:
 except Exception:
     sys.exit(0)
 rows = [(v["status"], k, v.get("value_string") or "") for k, v in alarms.items() if v["status"] != "CLEAR"]
-for status, key, value in rows[:12]:
+for status, key, value in rows[:8]:
     print("  ", status, key, value)
 if not rows:
     print("   nenhum")
@@ -59,12 +125,11 @@ if not rows:
     from heartbeat h join monitor m on m.id = h.monitor_id
     where h.time = (select max(time) from heartbeat where monitor_id = h.monitor_id);
   " 2>/dev/null | sed 's/^/  /' || true
-  echo
-  echo "ERROS RECENTES (ultima hora):"
-  for c in kuruk-cloud mysql uptime-kuma cloudflared; do
-    msg=$(docker logs --since 60m "$c" 2>&1 | grep -iE "error|fatal|failed" | tail -2 | tr '\n' ' ' | cut -c1-180)
-    [ -n "$msg" ] && echo "  [$c] $msg"
-  done
+  if [ "$inv" -gt 0 ]; then
+    echo
+    echo "ERROS PARA INVESTIGAR (60min):"
+    printf '%s' "$detalhes"
+  fi
   echo "  (fim)"
 }
 
@@ -89,13 +154,17 @@ trap 'rm -f "$REQ_FILE" "$RESP_FILE"' EXIT
 CONTEXT="$CTX" PERGUNTA="$PERGUNTA" MODEL="$MODEL" /usr/bin/python3 -c '
 import json, os
 prompt = f"""Voce e o Old, sysadmin do servidor Linux "old" (2 vCPU, 7 GB RAM, Docker).
-Responda em portugues do Brasil, seco e objetivo, no maximo 15 linhas.
+Responda em portugues do Brasil, seco e objetivo, no maximo 12 linhas.
 
-Use SOMENTE os dados do ESTADO abaixo.
+O bloco VEREDITO AUTOMATICO foi calculado por regras objetivas e tem prioridade
+sobre a sua interpretacao. Se ele diz "nenhum problema real detectado", responda
+que esta tudo ok e NAO invente risco.
+Rodape de erro so aparece quando ha algo para investigar; ausencia disso = sem problema.
+Nunca diga que um servico pode falhar se o tunel/health/monitores mostram ele no ar.
 Formato:
-1) DIAGNOSTICO: uma frase.
+1) DIAGNOSTICO: uma frase, alinhada ao veredito.
 2) ATENCAO: riscos reais agora, ou "nada critico".
-3) VERIFICAR: ate 4 comandos de leitura (docker ps, docker logs, df, free...), um por linha.
+3) VERIFICAR: ate 3 comandos de leitura, um por linha (ou "nada a verificar").
 
 ## ESTADO
 {os.environ["CONTEXT"]}

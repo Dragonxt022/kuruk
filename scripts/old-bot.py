@@ -232,12 +232,27 @@ def bloco_recursos() -> str:
     )
 
 
+def bloco_tunel() -> str:
+    saida = rodar(
+        ["bash", "-lc",
+         "docker exec old-home wget -q -T 5 -O- http://cloudflared:20241/ready 2>/dev/null"],
+        20,
+    )
+    m = re.search(r'"readyConnections":\s*(\d+)', saida)
+    if not m:
+        return "🚇 <b>Túnel</b> · 🔴 sem resposta"
+    conexoes = int(m.group(1))
+    icone = "🟢" if conexoes >= 2 else ("🟠" if conexoes == 1 else "🔴")
+    return f"🚇 <b>Túnel</b> · {icone} {conexoes} conexões ativas"
+
+
 def resumo_status() -> str:
     agora = time.strftime("%d/%m %H:%M")
     return (
         f"🖥️ <b>OLD</b> · {agora}\n\n"
         f"{bloco_containers()}\n\n"
         f"{bloco_health()}\n"
+        f"{bloco_tunel()}\n"
         f"{bloco_recursos()}"
     )
 

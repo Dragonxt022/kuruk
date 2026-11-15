@@ -64,6 +64,19 @@ old-actions.sh list                      # ações permitidas
 old-actions.sh status                    # só leitura
 ```
 
+O script monta um **veredito por regras** antes de chamar o modelo (containers,
+conexões do túnel, HTTP da API, monitores DOWN, alarmes do Netdata, erros
+classificados). O modelo só relata esse veredito — é o que evita um 1.7b
+"inventar risco" ao ver uma linha de log.
+
+Erros de log são classificados assim:
+
+- `unexpected EOF` / `stream canceled` em `/api/commands/events`: desconexão do
+  SSE que os desktops mantêm aberto. Normal.
+- `timeout: no recent network activity` / `Failed to dial a quic`: o cloudflared
+  reconectando ao edge. Só é problema se `readyConnections` cair abaixo de 2.
+- qualquer outro: entra como "para investigar".
+
 No Telegram (bot `MAIA`): `/status`, `/alerts`, `/ai <pergunta>`, `/fix`,
 `/confirm <código>`, `/cancel`.
 
