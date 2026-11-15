@@ -874,28 +874,44 @@ export async function cancelPayOrder(uuid: string): Promise<PayOrderRow | null> 
     );
     return getPayOrderRow(uuid);
   }
-  const raw = await payApiForCompany<unknown>(
+  await payApiForCompany<unknown>(
     row.company_uuid, row.environment,
     `/v1/orders/${encodeURIComponent(row.mp_order_id)}/cancel`,
     { method: 'POST', body: {}, headers: { 'x-allow-cancelable-status': 'at_terminal' } },
   );
-  const snapshot = parseOrder(raw);
-  await updateOrderFromSnapshot(uuid, snapshot);
-  return getPayOrderRow(uuid);
+  // A resposta do cancelamento varia (order ou recibo); o estado confiável é uma
+  // releitura do pedido, como em todo o resto do módulo.
+  try {
+    return await refreshPayOrder(uuid);
+  } catch {
+    await getPool().query(
+      `UPDATE pay_orders SET status = 'canceled', status_detail = 'canceled_by_api' WHERE uuid = ?`,
+      [uuid],
+    );
+    return getPayOrderRow(uuid);
+  }
 }
 
 export async function refundPayOrder(uuid: string): Promise<PayOrderRow | null> {
   const row = await getPayOrderRow(uuid);
   if (!row) return null;
   if (!row.mp_order_id) throw new PayError('Esta cobrança ainda não chegou ao Mercado Pago.');
-  const raw = await payApiForCompany<unknown>(
+  await payApiForCompany<unknown>(
     row.company_uuid, row.environment,
     `/v1/orders/${encodeURIComponent(row.mp_order_id)}/refund`,
     { method: 'POST', body: {} },
   );
-  const snapshot = parseOrder(raw);
-  await updateOrderFromSnapshot(uuid, snapshot);
-  return getPayOrderRow(uuid);
+  try {
+    return await refreshPayOrder(uuid);
+  } catch {
+    await getPool().query(
+      `UPDATE pay_orders
+          SET status = 'refunded', refunded_amount_cents = COALESCE(refunded_amount_cents, amount_cents)
+        WHERE uuid = ?`,
+      [uuid],
+    );
+    return getPayOrderRow(uuid);
+  }
 }
 
 export function serializePayOrder(row: PayOrderRow): PayOrderView {

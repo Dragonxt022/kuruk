@@ -10,17 +10,17 @@ import {
 } from '../pay';
 
 /**
- * Kuruk Pay no Kuruk Web (`/m/pay`) â€” a configuraÃ§Ã£o que o lojista faz no celular.
+ * Kuruk Pay no Kuruk Web (`/m/pay`) — a configuração que o lojista faz no celular.
  *
- * Mesma sessÃ£o do painel (`company_mobile_grants`): nada de senha nova. O OAuth Ã©
+ * Mesma sessão do painel (`company_mobile_grants`): nada de senha nova. O OAuth é
  * iniciado por um POST autenticado que grava o `state`; o retorno do Mercado Pago cai
- * em `/api/pay/oauth/callback` e volta para cÃ¡.
+ * em `/api/pay/oauth/callback` e volta para cá.
  */
 const router = Router();
 
 router.use(requireMobileAuth);
 
-/** Quem pode abrir a tela. Operador de caixa vÃª, mas nÃ£o mexe na conta. */
+/** Quem pode abrir a tela. Operador de caixa vê, mas não mexe na conta. */
 function podeVer(req: MobileRequest): boolean {
   const p = req.grant!.permissions;
   return p.includes('kurukpay.settings.manage')
@@ -37,7 +37,11 @@ function podeCobrar(req: MobileRequest): boolean {
   return podeGerenciar(req) || req.grant!.permissions.includes('store.sales.create');
 }
 
-function bloquear(req: MobileRequest, res: import('express').Response, tipo: 'ver' | 'gerenciar' | 'cobrar' = 'ver'): boolean {
+function bloquear(
+  req: MobileRequest,
+  res: import('express').Response,
+  tipo: 'ver' | 'gerenciar' | 'cobrar' = 'ver',
+): boolean {
   const ok = tipo === 'gerenciar' ? podeGerenciar(req)
     : tipo === 'cobrar' ? podeCobrar(req)
       : podeVer(req);
@@ -107,7 +111,7 @@ router.post('/conectar', async (req: MobileRequest, res) => {
   if (bloquear(req, res, 'gerenciar')) return;
   const app = await loadPayAppSettings();
   if (!app.clientId || !app.clientSecret) {
-    res.redirect('/m/pay?erro=' + encodeURIComponent('O Kuruk Pay ainda nÃ£o foi configurado pelo suporte.'));
+    res.redirect('/m/pay?erro=' + encodeURIComponent('O Kuruk Pay ainda não foi configurado pelo suporte.'));
     return;
   }
   const environment = normalizePayEnvironment((req.body ?? {}).environment);
@@ -153,8 +157,8 @@ router.post('/terminal-padrao', async (req: MobileRequest, res) => {
     ? await setDefaultPayTerminal(req.grant!.companyUuid, account.environment, terminalId)
     : false;
   res.redirect('/m/pay?' + (ok
-    ? 'ok=' + encodeURIComponent('Terminal padrÃ£o atualizado.')
-    : 'erro=' + encodeURIComponent('Escolha um terminal vÃ¡lido.')));
+    ? 'ok=' + encodeURIComponent('Terminal padrão atualizado.')
+    : 'erro=' + encodeURIComponent('Escolha um terminal válido.')));
 });
 
 router.post('/cobrar', async (req: MobileRequest, res) => {
@@ -166,7 +170,7 @@ router.post('/cobrar', async (req: MobileRequest, res) => {
   }
   const amountCents = parseAmountCents((req.body ?? {}).amount);
   if (amountCents < 1) {
-    res.redirect('/m/pay?erro=' + encodeURIComponent('Informe um valor vÃ¡lido para a cobranÃ§a.'));
+    res.redirect('/m/pay?erro=' + encodeURIComponent('Informe um valor válido para a cobrança.'));
     return;
   }
   try {
@@ -175,7 +179,7 @@ router.post('/cobrar', async (req: MobileRequest, res) => {
       environment: account.environment,
       origin: 'teste',
       amountCents,
-      description: String((req.body ?? {}).description ?? '').trim() || 'CobranÃ§a de teste Kuruk Pay',
+      description: String((req.body ?? {}).description ?? '').trim() || 'Cobrança de teste Kuruk Pay',
       terminalId: String((req.body ?? {}).terminalId ?? '').trim() || account.default_terminal_id,
     });
     res.redirect('/m/pay?pedido=' + encodeURIComponent(order.uuid));
@@ -189,7 +193,7 @@ router.get('/pedidos/:uuid', async (req: MobileRequest, res) => {
   const uuid = String(req.params.uuid);
   const owner = await getPayOrderForCompany(req.grant!.companyUuid, uuid);
   if (!owner) {
-    res.status(404).json({ error: 'CobranÃ§a nÃ£o encontrada.' });
+    res.status(404).json({ error: 'Cobrança não encontrada.' });
     return;
   }
   try {
@@ -206,12 +210,12 @@ router.post('/pedidos/:uuid/cancelar', async (req: MobileRequest, res) => {
   const uuid = String(req.params.uuid);
   const owner = await getPayOrderForCompany(req.grant!.companyUuid, uuid);
   if (!owner) {
-    res.redirect('/m/pay?erro=' + encodeURIComponent('CobranÃ§a nÃ£o encontrada.'));
+    res.redirect('/m/pay?erro=' + encodeURIComponent('Cobrança não encontrada.'));
     return;
   }
   try {
     await cancelPayOrder(uuid);
-    res.redirect('/m/pay?ok=' + encodeURIComponent('CobranÃ§a cancelada.'));
+    res.redirect('/m/pay?ok=' + encodeURIComponent('Cobrança cancelada.'));
   } catch (e) {
     res.redirect('/m/pay?erro=' + encodeURIComponent(friendlyPayMessage(e)));
   }
@@ -222,16 +226,15 @@ router.post('/pedidos/:uuid/estornar', async (req: MobileRequest, res) => {
   const uuid = String(req.params.uuid);
   const owner = await getPayOrderForCompany(req.grant!.companyUuid, uuid);
   if (!owner) {
-    res.redirect('/m/pay?erro=' + encodeURIComponent('CobranÃ§a nÃ£o encontrada.'));
+    res.redirect('/m/pay?erro=' + encodeURIComponent('Cobrança não encontrada.'));
     return;
   }
   try {
     await refundPayOrder(uuid);
-    res.redirect('/m/pay?ok=' + encodeURIComponent('CobranÃ§a estornada.'));
+    res.redirect('/m/pay?ok=' + encodeURIComponent('Cobrança estornada.'));
   } catch (e) {
     res.redirect('/m/pay?erro=' + encodeURIComponent(friendlyPayMessage(e)));
   }
 });
 
 export default router;
-
