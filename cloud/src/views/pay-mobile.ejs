@@ -212,6 +212,13 @@
                 </form>
               </div>
             <% } %>
+            <% if (o.paid && canManage && !o.refundedAmountCents) { %>
+              <div class="paym-actions">
+                <form method="post" action="/m/pay/pedidos/<%= o.uuid %>/estornar" onsubmit="return confirm('Estornar esta cobrança no Mercado Pago?');">
+                  <button class="m-btn m-btn-sec" type="submit">Estornar</button>
+                </form>
+              </div>
+            <% } %>
           </div>
           <strong class="m-list-value">R$ <%= brl(o.amountCents) %></strong>
         </li>

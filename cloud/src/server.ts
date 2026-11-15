@@ -34,7 +34,6 @@ import paymentRoutes from './routes/payments';
 import payRoutes from './routes/pay';
 import payMobileRoutes from './routes/payMobile';
 import payAdminRoutes from './routes/payAdmin';
-import payPublicRoutes from './routes/payPublic';
 import payOAuthPublicRoutes from './routes/payOAuthPublic';
 import planRoutes, { publicPlanSealsRouter } from './routes/plans';
 import usageRoutes from './routes/usage';

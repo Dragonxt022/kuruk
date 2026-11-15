@@ -55,11 +55,11 @@ export class SalePaymentRepository extends BaseRepository {
     return row.fee;
   }
 
-  findBySale(saleId: number): { method_name: string; method_type: string; amount_cents: number; receivable_id: number | null; points_used: number | null }[] {
+  findBySale(saleId: number): { method_name: string; method_type: string; amount_cents: number; receivable_id: number | null; points_used: number | null; point_order_uuid: string | null }[] {
     return this.raw(
-      'SELECT method_name, method_type, amount_cents, receivable_id, points_used FROM sale_payments WHERE sale_id = ?',
+      'SELECT method_name, method_type, amount_cents, receivable_id, points_used, point_order_uuid FROM sale_payments WHERE sale_id = ?',
       saleId,
-    ) as { method_name: string; method_type: string; amount_cents: number; receivable_id: number | null; points_used: number | null }[];
+    ) as { method_name: string; method_type: string; amount_cents: number; receivable_id: number | null; points_used: number | null; point_order_uuid: string | null }[];
   }
 }
 

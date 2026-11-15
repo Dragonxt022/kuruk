@@ -99,3 +99,5 @@ O módulo `src/modules/kuruk-pay` só repassa ao cloud com as credenciais da lic
   lançada como cartão manual (comportamento antigo).
 - Se o Mercado Pago aprovar a cobrança e a venda falhar depois (ex.: caixa fechado), o pedido
   aparece em **Kuruk Pay → Cobranças recentes** para estorno manual.
+- O cancelamento da venda estorna a cobrança automaticamente; **devolução parcial** não —
+  nesse caso, estorne manualmente em Kuruk Pay → Cobranças recentes.

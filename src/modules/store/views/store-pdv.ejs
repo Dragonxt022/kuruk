@@ -2301,6 +2301,11 @@
           this.$nextTick(() => this.$refs.clearConfirm.focus());
         },
         doClear() {
+          const temPoint = this.payments.some((p) => p.pointOrderUuid);
+          if (temPoint && !window.confirm('Há pagamento aprovado na maquininha nesta venda. Limpar o carrinho NÃO estorna a cobrança. Continuar?')) {
+            this.$refs.clearDlg.close();
+            return;
+          }
           this.cart = []; this.payments = []; this.discountCents = 0; this.surchargeCents = 0; this.discountReason = ''; this.customerId = ''; this.customerName = ''; this.customerBalances = {};
           this.serviceType = 'local';
           this.slots[this.activeSlot].clientRequestId = '';
@@ -2884,6 +2889,10 @@
         editPayment(idx) {
           const p = this.payments[idx];
           if (!p) return;
+          if (p.pointOrderUuid) {
+            this.payError = 'Pagamento aprovado na maquininha não pode ser editado. Remova com confirmação ou estorne no Kuruk Pay.';
+            return;
+          }
           // Se já havia outro pagamento em edição, devolve-o antes de abrir este.
           if (this.pay.editingBackup) {
             const prev = this.pay.editingBackup;
@@ -2914,6 +2923,10 @@
         removePayment(idx) {
           const removed = this.payments[idx];
           if (!removed) return;
+          if (removed.pointOrderUuid
+            && !window.confirm('Este pagamento já foi aprovado na maquininha. Remover da venda NÃO estorna a cobrança. Continuar?')) {
+            return;
+          }
           this.payments.splice(idx, 1);
           // Devolve a forma removida como selecionada e joga o restante de volta no campo,
           // pronto pra reeditar/readicionar.
@@ -2925,6 +2938,10 @@
         splitEqual() {
           const n = this.pay.split;
           if (!n || n < 2) return;
+          if (this.payments.some((p) => p.pointOrderUuid)) {
+            this.payError = 'Já existe pagamento aprovado na maquininha nesta venda. Finalize ou estorne antes de dividir.';
+            return;
+          }
           const method = this.selectedMethod();
           const type = this.selectedType();
           if (!method) { this.payError = 'Escolha a forma de pagamento.'; return; }

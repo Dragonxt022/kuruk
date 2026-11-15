@@ -72,7 +72,10 @@ router.get('/oauth/callback', async (req, res) => {
   const returnUrl = safeReturnUrl(saved.return_url);
 
   if (mpError || !code) {
-    res.redirect(appendQuery(returnUrl, 'pay', 'cancelado'));
+    // `access_denied` é o lojista clicando em "cancelar" no Mercado Pago; qualquer outro
+    // erro (redirect_uri divergente, app desligado) é falha de configuração e merece a
+    // tela de erro, não a de cancelamento.
+    res.redirect(appendQuery(returnUrl, 'pay', mpError === 'access_denied' ? 'cancelado' : 'erro'));
     return;
   }
 
