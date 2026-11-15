@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { requireAdminAuth } from '../adminAuth';
 import {
-  disconnectPayAccount, friendlyPayMessage, listPayAccountsForAdmin, listPayOrdersForAdmin,
-  loadPayAppSettingsView, normalizePayEnvironment, refreshPayOrder, refundPayOrder,
-  savePayAppSettings, serializePayOrder, setCompanyPayEnvironment, setPayDefaultEnvironment,
+  disconnectPayAccount, friendlyPayMessage, getPayAccount, listPayAccountsForAdmin,
+  listPayOrdersForAdmin, loadPayAppSettingsView, normalizePayEnvironment, refreshPayOrder,
+  refundPayOrder, savePayAppSettings, serializePayOrder, setCompanyPayEnvironment,
+  setPayDefaultEnvironment,
 } from '../pay';
 
 /**
@@ -70,7 +71,15 @@ router.post('/pay/environment', requireAdminAuth, async (req, res) => {
 /** Troca o ambiente de UMA empresa com um clique (vale para o app/PDV dela). */
 router.post('/pay/companies/:uuid/environment', requireAdminAuth, async (req, res) => {
   const environment = normalizePayEnvironment((req.body ?? {}).environment);
-  await setCompanyPayEnvironment(String(req.params.uuid), environment);
+  const companyUuid = String(req.params.uuid);
+  const account = await getPayAccount(companyUuid, environment);
+  if (!account) {
+    res.redirect('/admin/pay?error=' + encodeURIComponent(
+      `Esta empresa não tem conta conectada em ${environment === 'teste' ? 'teste' : 'produção'}. Peça para conectar no Kuruk Pay antes de trocar.`,
+    ));
+    return;
+  }
+  await setCompanyPayEnvironment(companyUuid, environment);
   res.redirect('/admin/pay?ok=' + encodeURIComponent(
     `Empresa agora está no ambiente de ${environment === 'teste' ? 'teste' : 'produção'}.`,
   ));
