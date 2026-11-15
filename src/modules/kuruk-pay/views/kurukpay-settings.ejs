@@ -120,6 +120,9 @@
           <p class="hint" style="margin-top:12px" x-show="connecting">
             A janela do Mercado Pago foi aberta. Depois de autorizar, esta tela atualiza sozinha.
           </p>
+          <p class="hint" style="margin-top:12px" x-show="connectUrl" x-cloak>
+            Se a janela não abriu, <a :href="connectUrl" target="_blank" rel="noopener">clique aqui para autorizar no Mercado Pago</a>.
+          </p>
           <p class="hint" style="margin-top:12px" x-show="!canManage">
             Seu usuário pode ver a conexão, mas não alterá-la.
           </p>
@@ -278,7 +281,7 @@
         loading: true, error: '', notice: '',
         state: null,
         environment: 'producao',
-        connecting: false, connectingTimer: null, connectingTries: 0,
+        connecting: false, connectingTimer: null, connectingTries: 0, connectUrl: '',
         syncing: false, disconnecting: false, defaultBusy: false,
         test: { amount: '', description: 'Cobrança de teste', terminalId: '' },
         testOrder: null, testBusy: false, testError: '', testTimer: null,
@@ -340,7 +343,7 @@
         },
 
         async connect() {
-          this.error = ''; this.notice = '';
+          this.error = ''; this.notice = ''; this.connectUrl = '';
           if (!this.canManage) return;
           this.connecting = true;
           try {
@@ -351,8 +354,9 @@
             });
             const d = await r.json();
             if (!r.ok) { this.error = d.error || 'Não foi possível iniciar a conexão.'; this.connecting = false; return; }
+            this.connectUrl = d.url || '';
             const win = window.open(d.url, '_blank', 'noopener');
-            if (!win) this.notice = 'Permita pop-ups ou abra o Mercado Pago em outra aba e conclua a autorização.';
+            if (!win) this.notice = 'Permita pop-ups ou use o link abaixo para concluir a autorização.';
             this.startPolling();
           } catch (e) {
             this.error = 'Sem conexão com a nuvem.';

@@ -55,6 +55,19 @@
 
         <% if (ok) { %><div class="pay-alert ok"><%= ok %></div><% } %>
         <% if (error) { %><div class="pay-alert err"><%= error %></div><% } %>
+        <% if (!app.configured) { %>
+          <div class="pay-alert err">
+            <strong>Falta o Client Secret para ativar o Kuruk Pay.</strong>
+            Abra o aplicativo <strong>Kuruk-Pay</strong> no painel de desenvolvedores do Mercado Pago,
+            copie o <strong>Client Secret de produção</strong> e cole no campo abaixo. Sem ele, o botão
+            “Conectar Mercado Pago” do lojista não funciona.
+          </div>
+        <% } else if (!accounts.length) { %>
+          <div class="pay-alert ok">
+            Aplicativo configurado. Agora cada lojista conecta a própria conta em
+            <strong>Kuruk Pay</strong> no app ou em <strong>/m/pay</strong>.
+          </div>
+        <% } %>
 
         <div class="pay-grid">
           <section class="pay-card">
@@ -62,6 +75,8 @@
             <p class="hint">
               Credenciais do aplicativo criado no Mercado Pago (App ID <strong>5049718943825028</strong>).
               Elas identificam o Kuruk perante o MP; o token de cada lojista é obtido por OAuth.
+              Onde encontrar: <strong>developers.mercadopago.com.br → Suas integrações → Kuruk-Pay →
+              Credenciais de produção</strong>.
             </p>
             <div class="badge-line">
               <% if (app.configured) { %><span class="pill on">Aplicativo configurado</span><% } else { %><span class="pill err">Falta Client ID/Secret</span><% } %>
