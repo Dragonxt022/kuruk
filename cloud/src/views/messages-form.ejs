@@ -54,7 +54,13 @@
     .mf-radio small { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
     .mf-radio:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
     #f-targets-wrap { margin-top: 12px; }
-    .mf-search { margin-bottom: 8px !important; }
+    .mf-search {
+      display: block; width: 100%; padding: 9px 12px; margin: 0 0 8px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); color: var(--text);
+      font-family: inherit; font-size: 0.9rem;
+    }
+    .mf-search:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
     .mf-target-list {
       max-height: 230px; overflow: auto; overscroll-behavior: contain;
       border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
@@ -358,6 +364,51 @@
       document.getElementById('f-error').style.display = 'none';
     }
 
+    // Precisam ser globais: o `onchange="toggleTargets()"` dos radios é chamado no escopo
+    // da página, e o toggle chama renderTargets. Presas ao IIFE abaixo, a edição de uma
+    // mensagem com empresas específicas morria com "renderTargets is not defined" antes
+    // de montar a lista.
+    function renderTargets() {
+      var list = document.getElementById('f-target-list');
+      var q = (document.getElementById('f-target-search').value || '').trim().toLowerCase();
+      list.innerHTML = '';
+      var found = 0;
+      COMPANIES.forEach(function (c) {
+        if (q && c.name.toLowerCase().indexOf(q) === -1) return;
+        found++;
+        var label = document.createElement('label');
+        label.className = 'mf-target-item';
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = c.uuid;
+        input.checked = !!selectedTargets[c.uuid];
+        input.addEventListener('change', function () {
+          if (input.checked) selectedTargets[c.uuid] = true;
+          else delete selectedTargets[c.uuid];
+          updateTargetCount();
+        });
+        var span = document.createElement('span');
+        span.textContent = c.name;
+        label.appendChild(input);
+        label.appendChild(span);
+        list.appendChild(label);
+      });
+      if (!found) {
+        var p = document.createElement('p');
+        p.className = 'mf-target-empty';
+        p.textContent = 'Nenhuma empresa encontrada.';
+        list.appendChild(p);
+      }
+      updateTargetCount();
+    }
+
+    function updateTargetCount() {
+      var n = Object.keys(selectedTargets).length;
+      document.getElementById('f-target-count').textContent = n
+        ? n + (n === 1 ? ' empresa selecionada.' : ' empresas selecionadas.')
+        : 'Nenhuma empresa selecionada.';
+    }
+
     /**
      * O contenteditable deixa o primeiro texto solto (sem <p>) quando a pessoa começa a
      * digitar num editor vazio. Aqui os nós de texto/inline de topo viram parágrafos para
@@ -544,47 +595,6 @@
       editor.addEventListener('input', updatePreview);
 
       // ─── Destinos ───
-      function renderTargets() {
-        var list = document.getElementById('f-target-list');
-        var q = (document.getElementById('f-target-search').value || '').trim().toLowerCase();
-        list.innerHTML = '';
-        var found = 0;
-        COMPANIES.forEach(function (c) {
-          if (q && c.name.toLowerCase().indexOf(q) === -1) return;
-          found++;
-          var label = document.createElement('label');
-          label.className = 'mf-target-item';
-          var input = document.createElement('input');
-          input.type = 'checkbox';
-          input.value = c.uuid;
-          input.checked = !!selectedTargets[c.uuid];
-          input.addEventListener('change', function () {
-            if (input.checked) selectedTargets[c.uuid] = true;
-            else delete selectedTargets[c.uuid];
-            updateTargetCount();
-          });
-          var span = document.createElement('span');
-          span.textContent = c.name;
-          label.appendChild(input);
-          label.appendChild(span);
-          list.appendChild(label);
-        });
-        if (!found) {
-          var p = document.createElement('p');
-          p.className = 'mf-target-empty';
-          p.textContent = 'Nenhuma empresa encontrada.';
-          list.appendChild(p);
-        }
-        updateTargetCount();
-      }
-
-      function updateTargetCount() {
-        var n = Object.keys(selectedTargets).length;
-        document.getElementById('f-target-count').textContent = n
-          ? n + (n === 1 ? ' empresa selecionada.' : ' empresas selecionadas.')
-          : 'Nenhuma empresa selecionada.';
-      }
-
       document.getElementById('f-target-search').addEventListener('input', renderTargets);
 
       updateCounters();
