@@ -8,151 +8,239 @@
   <link rel="icon" type="image/png" href="/logo_kuruk-icon.png">
   <%- include('partials/styles') %>
   <style>
-    .pay-page { max-width: 620px; margin: 0 auto; padding: 24px 16px 48px; }
-    .pay-head { text-align: center; margin-bottom: 18px; }
-    .pay-head .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
-    .pay-amount { font-size: 2rem; font-weight: 800; margin: 6px 0 0; }
-    .pay-meta { color: var(--muted); font-size: .9rem; margin-top: 4px; }
-    .pay-desc { font-weight: 600; margin-top: 10px; }
-    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 520px at 8% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 58%),
+        radial-gradient(820px 500px at 100% 12%, color-mix(in srgb, #6366f1 9%, transparent), transparent 55%),
+        var(--bg);
+    }
+    .pay-shell { max-width: 640px; margin: 0 auto; padding: 28px 16px 52px; }
+    .pay-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 30px; }
+    .pay-brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; font-size: .92rem; letter-spacing: -.02em; min-width: 0; }
+    .pay-brand img { width: 30px; height: 30px; border-radius: 9px; flex: none; }
+    .pay-brand span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pay-secure { display: inline-flex; align-items: center; gap: 6px; flex: none; font-size: .7rem; font-weight: 700; color: var(--muted); }
+    .pay-secure svg { width: 14px; height: 14px; }
+
+    .pay-hero { text-align: center; margin-bottom: 22px; }
+    .pay-state-icon {
+      width: 58px; height: 58px; margin: 0 auto .85rem; border-radius: 18px;
+      display: grid; place-items: center;
+      background: var(--surface); border: 1px solid var(--border-light);
+      box-shadow: var(--shadow-sm);
+    }
+    .pay-state-icon svg { width: 26px; height: 26px; }
+    .pay-state-icon.pendente { color: #b45309; background: #fff8ec; border-color: #f5c26b; }
+    .pay-state-icon.paga { color: var(--primary); background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
+    .pay-state-icon.cancelada { color: var(--muted); background: var(--surface-hover); }
+    .pay-amount { margin: 0; font-size: clamp(2.1rem, 9vw, 3rem); line-height: 1; letter-spacing: -.055em; font-weight: 800; }
+    .pay-desc { margin: .55rem 0 0; font-size: .94rem; font-weight: 600; line-height: 1.35; }
+    .pay-meta { margin: .35rem 0 0; color: var(--muted); font-size: .79rem; }
+    .pay-status-line { margin: 12px 0 0; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: .74rem; font-weight: 700; }
     .pill.pendente { background: #fff4e5; color: #b45309; }
     .pill.paga { background: var(--primary-soft); color: var(--primary); }
     .pill.cancelada { background: var(--surface-hover); color: var(--muted); }
+
+    .pay-card {
+      padding: 22px; border-radius: 20px; background: var(--surface);
+      border: 1px solid var(--border-light);
+      box-shadow: 0 32px 70px -48px rgba(15, 23, 42, .5);
+    }
+    .pay-card:empty { display: none; }
+    .pay-card h2 { margin: 0 0 .25rem; font-size: 1.05rem; letter-spacing: -.02em; }
+    .pay-lead { margin: 0 0 14px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
     .pay-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 6px; }
     .pay-actions form { flex: 1 1 150px; }
     .pay-actions .btn { width: 100%; }
-    .pay-method-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+
+    .pay-method-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
     .pay-method-grid form { margin: 0; }
     .pay-method-card {
       width: 100%; height: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-      padding: 14px; text-align: left; font: inherit; color: var(--text); cursor: pointer;
+      padding: 15px; text-align: left; font: inherit; color: var(--text); cursor: pointer;
       border: 1.5px solid var(--border-light); border-radius: 14px; background: var(--surface);
-      transition: border-color .15s, transform .15s;
+      transition: border-color .15s, transform .15s, box-shadow .15s;
     }
-    .pay-method-card:hover { border-color: var(--primary); transform: translateY(-1px); }
-    .pay-method-card .icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; margin-bottom: 4px; }
+    .pay-method-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 12px 24px -20px color-mix(in srgb, var(--primary) 70%, transparent); }
+    .pay-method-card .icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; margin-bottom: 5px; }
     .pay-method-card .icon svg { width: 19px; height: 19px; }
     .pay-method-card .icon.pix { background: linear-gradient(135deg, #0f9f9e, #14b8a6); }
-    .pay-method-card .icon.card { background: linear-gradient(135deg, #6d28d9, #a855f7); }
+    .pay-method-card .icon.credit { background: linear-gradient(135deg, #6d28d9, #a855f7); }
     .pay-method-card strong { font-size: .9rem; }
-    .pay-method-card span { font-size: .76rem; color: var(--text-muted); line-height: 1.4; }
-    @media (max-width: 520px) { .pay-method-grid { grid-template-columns: 1fr; } }
-    .qr-box { text-align: center; margin-top: 16px; }
-    .qr-box img { width: 220px; height: 220px; background: #fff; padding: 8px; border-radius: 12px; border: 1px solid var(--border-light); }
-    .copy-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
-    .copy-row input { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; }
+    .pay-method-card span { font-size: .75rem; color: var(--muted); line-height: 1.4; }
+    .pay-method-note { margin: 12px 0 0; text-align: center; font-size: .7rem; color: var(--muted); line-height: 1.5; }
+
+    .qr-box { margin-top: 14px; padding: 16px; border-radius: 15px; border: 1px solid var(--border-light); background: var(--surface-hover); text-align: center; }
+    .qr-box .qr-title { margin: 0; font-weight: 700; font-size: .92rem; }
+    .qr-box .qr-sub { margin: .2rem 0 .8rem; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+    .qr-box img { width: min(230px, 68vw); height: auto; background: #fff; padding: 9px; border-radius: 14px; border: 1px solid var(--border-light); box-shadow: var(--shadow-sm); }
+    .copy-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+    .copy-row input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; padding: .55rem .7rem; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+    .copy-row .btn { flex: none; }
     .link-row { margin-top: 14px; }
-    .link-row a { word-break: break-all; }
+    .link-row .btn { width: 100%; justify-content: center; }
     code { background: var(--surface-hover); padding: 1px 6px; border-radius: 6px; font-size: .85em; }
+    .pay-wait { margin: 16px 0 0; color: var(--muted); font-size: .74rem; line-height: 1.5; text-align: center; }
+    .pay-state { text-align: center; padding: 8px 2px 2px; }
+    .pay-state .big-icon {
+      width: 62px; height: 62px; margin: 0 auto .8rem; border-radius: 50%;
+      display: grid; place-items: center;
+    }
+    .pay-state .big-icon svg { width: 30px; height: 30px; }
+    .pay-state.paga .big-icon { background: var(--primary-soft); color: var(--primary); }
+    .pay-state.cancelada .big-icon { background: var(--surface-hover); color: var(--muted); }
+    .pay-state h2 { margin-bottom: .35rem; }
+    .pay-state p { margin: 0 auto; max-width: 430px; color: var(--muted); font-size: .82rem; line-height: 1.55; }
+    .pay-footer { margin: 20px 0 0; text-align: center; color: var(--muted); font-size: .7rem; line-height: 1.55; }
+    .pay-footer strong { color: var(--text); }
+    @media (max-width: 520px) {
+      .pay-shell { padding-top: 20px; }
+      .pay-card { padding: 18px; border-radius: 17px; }
+      .pay-method-grid { grid-template-columns: 1fr; }
+      .pay-topbar { margin-bottom: 22px; }
+      .pay-secure span { display: none; }
+    }
   </style>
 </head>
 <body>
-  <div class="pay-page">
+  <% var temPagamento = !notFound && !!(charge.mp_qr_code_base64 || charge.mp_qr_code || charge.mp_ticket_url || charge.mp_init_point); %>
+  <% var statusLabel = notFound ? 'Não encontrada' : (charge.status === 'paga' ? 'Pagamento confirmado' : (charge.status === 'cancelada' ? 'Cobrança cancelada' : 'Aguardando pagamento')); %>
+  <div class="pay-shell">
+    <div class="pay-topbar">
+      <div class="pay-brand">
+        <img src="/logo_kuruk-icon.png" alt="">
+        <span><%= notFound ? 'Kuruk' : companyName %></span>
+      </div>
+      <span class="pay-secure">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span>Pagamento seguro</span>
+      </span>
+    </div>
+
     <% if (notFound) { %>
-      <div class="card">
-        <h1>Cobrança não encontrada</h1>
-        <p class="field-hint">O link pode ter expirado ou sido copiado incompleto. Peça um novo link a quem enviou.</p>
+      <div class="pay-hero">
+        <div class="pay-state-icon cancelada">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <h1 class="pay-desc" style="margin:0">Link não encontrado</h1>
+        <p class="pay-meta">O endereço pode estar incompleto ou ter expirado.</p>
+      </div>
+      <div class="pay-card">
+        <div class="pay-state cancelada">
+          <div class="big-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h2>Cobrança não encontrada</h2>
+          <p>Peça um novo link a quem enviou a cobrança. Links antigos podem ter sido cancelados ou substituídos.</p>
+        </div>
       </div>
     <% } else { %>
-      <div class="pay-head">
-        <div class="brand"><img src="/logo_kuruk-icon.png" alt="" width="22" height="22"> <%= companyName %></div>
-        <p class="pay-amount">R$ <%= (charge.amount_cents / 100).toFixed(2).replace('.', ',') %></p>
-        <div class="pay-meta">Vencimento: <%= fmtDateBr(charge.due_date) %></div>
-        <div class="pay-desc"><%= charge.description %></div>
-        <p style="margin-top:10px">
-          <span class="pill <%= charge.status %>">
-            <%= charge.status === 'paga' ? 'Pagamento confirmado' : (charge.status === 'cancelada' ? 'Cobrança cancelada' : 'Aguardando pagamento') %>
-          </span>
-        </p>
+      <div class="pay-hero">
+        <% if (charge.status === 'pendente') { %>
+        <div class="pay-state-icon pendente">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <% } %>
+        <h1 class="pay-amount">R$ <%= (charge.amount_cents / 100).toFixed(2).replace('.', ',') %></h1>
+        <p class="pay-desc"><%= charge.description %></p>
+        <p class="pay-meta">Vencimento: <%= fmtDateBr(charge.due_date) %></p>
+        <p class="pay-status-line"><span class="pill <%= charge.status %>"><%= statusLabel %></span></p>
       </div>
 
       <% if (typeof ok !== 'undefined' && ok) { %><p class="success-banner"><%= ok %></p><% } %>
       <% if (typeof error !== 'undefined' && error) { %><p class="error-banner"><%= error %></p><% } %>
 
-      <% if (charge.status === 'paga') { %>
-        <div class="card">
-          <h2>Pagamento confirmado</h2>
-          <p class="field-hint" style="margin-top:0">
-            Recebemos o pagamento em <%= fmtDateTimeBr(charge.paid_at) %>. Nada mais a fazer por aqui —
-            a licença do Kuruk é atualizada automaticamente.
-          </p>
-        </div>
-      <% } else if (charge.status === 'cancelada') { %>
-        <div class="card">
-          <h2>Cobrança cancelada</h2>
-          <p class="field-hint" style="margin-top:0">Esta cobrança foi cancelada. Em caso de dúvida, fale com quem enviou o link.</p>
-        </div>
-      <% } else { %>
-        <div class="card">
-          <% if (!gatewayOn) { %>
-            <h2>Pagamento online indisponível</h2>
-            <p class="field-hint" style="margin-top:0">
-              O pagamento por aqui ainda não está ativo. Fale com o suporte do Kuruk para combinar a forma de pagamento.
-            </p>
-            <% if (charge.instructions) { %>
-              <label>Instruções</label>
-              <p><%= charge.instructions %></p>
-            <% } %>
-          <% } else { %>
-            <% var temPagamento = !!(charge.mp_qr_code_base64 || charge.mp_qr_code || charge.mp_ticket_url || charge.mp_init_point); %>
-            <% if (!temPagamento) { %>
-              <h2>Como você quer pagar?</h2>
-              <p class="field-hint" style="margin-top:0">Escolha Pix para pagar agora ou cartão para abrir o ambiente seguro do Mercado Pago.</p>
-              <div class="pay-method-grid">
-                <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
-                  <input type="hidden" name="method" value="pix">
-                  <button type="submit" class="pay-method-card">
-                    <span class="icon pix">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 14v3"/><path d="M14 20h3"/><path d="M20 20h.01"/></svg>
-                    </span>
-                    <strong>Pagar com Pix</strong>
-                    <span>QR Code na hora. Aprovação imediata.</span>
-                  </button>
-                </form>
-                <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
-                  <input type="hidden" name="method" value="card">
-                  <button type="submit" class="pay-method-card">
-                    <span class="icon card">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M6 15h4"/></svg>
-                    </span>
-                    <strong>Cartão de crédito</strong>
-                    <span>Ambiente seguro do Mercado Pago.</span>
-                  </button>
-                </form>
-              </div>
-            <% } %>
-
-            <% if (charge.mp_qr_code_base64) { %>
-              <div class="qr-box">
-                <p class="field-hint" style="margin-top:0">Abra o app do seu banco, escolha <strong>Pix › Ler QR code</strong> e aponte para o código abaixo.</p>
-                <img src="data:image/png;base64,<%= charge.mp_qr_code_base64 %>" alt="QR code do Pix">
-                <div class="copy-row">
-                  <input type="text" id="pix-code" readonly value="<%= charge.mp_qr_code || '' %>">
-                  <button type="button" class="btn secondary" id="copy-pix">Copiar</button>
-                </div>
-                <p class="field-hint">Ou copie o código e use <strong>Pix › Pix Copia e Cola</strong> no app do banco.</p>
-              </div>
-            <% } %>
-
-            <% if (charge.mp_ticket_url) { %>
-              <div class="link-row">
-                <a class="btn secondary" href="<%= charge.mp_ticket_url %>" target="_blank" rel="noopener">Ver o pagamento no Mercado Pago</a>
-              </div>
-            <% } %>
-
-            <% if (charge.mp_init_point) { %>
-              <div class="link-row">
-                <a class="btn" href="<%= charge.mp_init_point %>" target="_blank" rel="noopener">Pagar com cartão no Mercado Pago</a>
-              </div>
-            <% } %>
-
-            <p class="field-hint" id="pay-wait" style="margin-top:16px">
-              Esta página confere o pagamento sozinha — pode deixá-la aberta que ela avisa quando o pagamento for confirmado.
-            </p>
+      <div class="pay-card">
+        <% if (charge.status === 'paga') { %>
+          <div class="pay-state paga">
+            <div class="big-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </div>
+            <h2>Pagamento confirmado</h2>
+            <p>Recebemos o pagamento em <%= fmtDateTimeBr(charge.paid_at) %>. Nada mais a fazer por aqui — a licença do Kuruk é atualizada automaticamente.</p>
+          </div>
+        <% } else if (charge.status === 'cancelada') { %>
+          <div class="pay-state cancelada">
+            <div class="big-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            </div>
+            <h2>Esta cobrança foi cancelada</h2>
+            <p>Ela não precisa mais ser paga. Se você já pagou ou precisa de um novo link, fale com quem enviou a cobrança.</p>
+          </div>
+        <% } else if (!gatewayOn) { %>
+          <h2>Pagamento online indisponível</h2>
+          <p class="pay-lead">O pagamento por aqui ainda não está ativo. Fale com o suporte do Kuruk para combinar a forma de pagamento.</p>
+          <% if (charge.instructions) { %>
+            <label>Instruções</label>
+            <p><%= charge.instructions %></p>
           <% } %>
-        </div>
-      <% } %>
+        <% } else { %>
+          <% if (!temPagamento) { %>
+            <h2>Escolha como pagar</h2>
+            <p class="pay-lead">Pague agora com Pix ou use o cartão no ambiente seguro do Mercado Pago.</p>
+            <div class="pay-method-grid">
+              <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
+                <input type="hidden" name="method" value="pix">
+                <button type="submit" class="pay-method-card">
+                  <span class="icon pix">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 14v3"/><path d="M14 20h3"/><path d="M20 20h.01"/></svg>
+                  </span>
+                  <strong>Pagar com Pix</strong>
+                  <span>QR Code na hora, aprovação imediata.</span>
+                </button>
+              </form>
+              <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
+                <input type="hidden" name="method" value="card">
+                <button type="submit" class="pay-method-card">
+                  <span class="icon credit">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M6 15h4"/></svg>
+                  </span>
+                  <strong>Cartão de crédito</strong>
+                  <span>Ambiente seguro do Mercado Pago.</span>
+                </button>
+              </form>
+            </div>
+            <p class="pay-method-note">Pagamento processado pelo Mercado Pago. O Kuruk não armazena dados do cartão.</p>
+          <% } %>
+
+          <% if (charge.mp_qr_code_base64) { %>
+            <div class="qr-box">
+              <p class="qr-title">Pague com Pix</p>
+              <p class="qr-sub">Abra o app do seu banco, escolha <strong>Pix › Ler QR code</strong> e aponte para o código abaixo.</p>
+              <img src="data:image/png;base64,<%= charge.mp_qr_code_base64 %>" alt="QR code do Pix">
+              <div class="copy-row">
+                <input type="text" id="pix-code" readonly value="<%= charge.mp_qr_code || '' %>">
+                <button type="button" class="btn secondary" id="copy-pix">Copiar</button>
+              </div>
+              <p class="field-hint" style="margin-top:10px">Ou copie o código e use <strong>Pix › Pix Copia e Cola</strong> no app do banco.</p>
+            </div>
+          <% } %>
+
+          <% if (charge.mp_init_point) { %>
+            <div class="link-row">
+              <a class="btn" href="<%= charge.mp_init_point %>" target="_blank" rel="noopener">Pagar com cartão no Mercado Pago</a>
+            </div>
+          <% } %>
+
+          <% if (charge.mp_ticket_url && !charge.mp_qr_code_base64) { %>
+            <div class="link-row">
+              <a class="btn secondary" href="<%= charge.mp_ticket_url %>" target="_blank" rel="noopener">Ver o pagamento no Mercado Pago</a>
+            </div>
+          <% } %>
+
+          <p class="pay-wait" id="pay-wait">
+            Esta página confere o pagamento sozinha — pode deixá-la aberta que ela avisa quando o pagamento for confirmado.
+          </p>
+        <% } %>
+      </div>
     <% } %>
+
+    <p class="pay-footer">
+      <strong>Kuruk</strong> · Este link é exclusivo para esta cobrança.<br>
+      Em caso de dúvida, fale com quem enviou.
+    </p>
   </div>
 
   <% if (!notFound && charge.status === 'pendente' && gatewayOn) { %>

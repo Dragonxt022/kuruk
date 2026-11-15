@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requirePermission } from '../permissions/middleware';
 import { audit } from '../audit/service';
-import { validateLicense, setLicense, getEntitledModules, type LicenseInfo } from './service';
+import { validateLicense, setLicense, getEntitledModules, refreshLicenseFromCloud, type LicenseInfo } from './service';
 import { canAutoUpdate, canSaveToCloud, planLabel } from './plans';
 import { runSync } from '../sync/engine';
 import { getCloudServerUrl } from '../config/cloud';
@@ -27,7 +27,11 @@ router.get('/', requirePermission('license.view'), (_req, res) => {
  * faixa de trial / modal de bloqueio por vencimento (nav.ejs), não só quem administra
  * a licença. Protegida apenas pelo `requireAuth` já aplicado ao router em server.ts.
  */
-router.get('/status', (_req, res) => {
+router.get('/status', async (req, res) => {
+  // `?refresh=1` força uma revalidação na nuvem antes de responder. Usado quando o app
+  // volta do checkout: o pagamento pode ter estendido a validade e o modal de licença
+  // expirada não pode continuar na tela até o próximo ciclo de sync.
+  if (req.query.refresh === '1') await refreshLicenseFromCloud();
   const info = validateLicense();
   res.json({
     status: info.status,

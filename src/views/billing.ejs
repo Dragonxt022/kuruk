@@ -881,7 +881,7 @@
     .pay-choice-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: #fff; margin-bottom: .3rem; }
     .pay-choice-icon svg { width: 20px; height: 20px; }
     .pay-choice-icon.pix { background: linear-gradient(135deg, #0f9f9e, #14b8a6); }
-    .pay-choice-icon.card { background: linear-gradient(135deg, #6d28d9, #a855f7); }
+    .pay-choice-icon.credit { background: linear-gradient(135deg, #6d28d9, #a855f7); }
     .pay-choice strong { font-size: .95rem; line-height: 1.25; }
     .pay-choice .pay-choice-sub { font-size: .77rem; color: var(--text-muted); line-height: 1.45; max-width: 92%; }
     .pay-choice .pay-choice-badge { margin-top: auto; font-size: .68rem; font-weight: 700; color: var(--primary); padding-top: .35rem; }
@@ -1296,7 +1296,7 @@
               <span class="pay-choice-badge">Aprovação na hora</span>
             </button>
             <button type="button" class="pay-choice" @click="chooseMethod('card')" :disabled="subBusy || loading">
-              <span class="pay-choice-icon card">
+              <span class="pay-choice-icon credit">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M6 15h4"/></svg>
               </span>
               <strong>Assinatura no cartão</strong>
@@ -1960,10 +1960,15 @@
           this.subBusy = true; this.subError = '';
           try {
             await this.loadSubscription(true);
+            await this.refreshLocalLicense();
             showToast('Status da assinatura atualizado.', 'info');
           } finally {
             this.subBusy = false;
           }
+        },
+        async refreshLocalLicense() {
+          // A nav é a dona do status de licença; o evento dispara a revalidação uma vez só.
+          window.dispatchEvent(new CustomEvent('kuruk-license-changed'));
         },
         cancelSubscription(force = false) {
           if (!force && this.retentionAvailable) {
@@ -2095,6 +2100,7 @@
               this.stopPoll();
               const extra = body.extended_days ? ` Licença válida até ${fmtDate(body.valid_until)} (+${body.extended_days} dias).` : '';
               showToast('Pagamento confirmado! Cobrança baixada.' + extra, 'success');
+              await this.refreshLocalLicense();
               this.closeCheckout();
               this.load();
               return;

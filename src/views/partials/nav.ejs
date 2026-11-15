@@ -4,6 +4,7 @@
   today: new Date().toLocaleDateString('pt-BR'),
   billingAlert: null,
   licenseStatus: null,
+  _licenseRefreshing: false,
   cloudIssueDismissed: false,
   cashAlert: null,
   // Abrir no celular: estado do diálogo compartilhado (vive na nav para abrir o QR
@@ -183,6 +184,24 @@
     }
     window.dispatchEvent(new CustomEvent('kuruk-messages-changed'));
   },
+  async refreshLicense() {
+    if (this._licenseRefreshing) return;
+    this._licenseRefreshing = true;
+    try {
+      const r = await fetch('/api/license/status?refresh=1');
+      if (r.ok) this.licenseStatus = await r.json();
+    } catch (e) { /* offline: mantém o status local */ }
+    finally { this._licenseRefreshing = false; }
+  },
+  // Só vale a pena revalidar quando a licença está vencida, em tolerância ou perto de
+  // vencer. Assim voltar de outra aba no meio do dia não gera consulta à toa.
+  maybeRefreshLicense() {
+    const s = this.licenseStatus;
+    const precisa = !s
+      || ['tolerancia', 'expirada', 'bloqueada'].includes(s.status)
+      || (s.daysRemaining != null && s.daysRemaining <= 3);
+    if (precisa) void this.refreshLicense();
+  },
   checkCloudStatus() {
     fetch('/api/sync/status').then((r) => r.ok ? r.json() : null).then((data) => { if (data) this.cloudStatus = data; }).catch(() => { this.cloudStatus = { configured: true, online: false }; });
   },
@@ -308,6 +327,12 @@
     // `pageshow` também dispara no carregamento inicial; só interessa quando a página
     // voltou do bfcache (ev.persisted), senão era um fetch duplicado em toda navegação.
     window.addEventListener('pageshow', (ev) => { if (ev.persisted) this.loadMessages(); });
+    // Pagamento concluído no checkout (ou aba voltando do Mercado Pago): revalida a
+    // licença na hora. Sem isso, o modal de 'Licença expirada' continuava aberto mesmo
+    // depois de o cloud já ter estendido a validade.
+    window.addEventListener('kuruk-license-changed', () => this.refreshLicense());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.maybeRefreshLicense(); });
+    window.addEventListener('pageshow', (ev) => { if (ev.persisted) this.maybeRefreshLicense(); });
     <% if (user && user.permissions.has('billing.view')) { %>
     jobs.push(fetch('/api/billing/alert').then((r) => r.ok ? r.json() : null).then((data) => { if (data && data.count) this.billingAlert = data; }).catch(() => {}));
     <% } %>
@@ -323,6 +348,9 @@
     this.checkCloudStatus();
     // Aba escondida não precisa sondar nuvem; no celular isso acordava o rádio à toa.
     setInterval(() => { if (!document.hidden) this.checkCloudStatus(); }, leve ? 120000 : 25000);
+    // Licença vencida/próxima: o pagamento pode cair pelo celular ou pelo webhook. Uma
+    // revalidação por minuto é barata e fecha o modal de bloqueio sozinha.
+    setInterval(() => { if (!document.hidden) this.maybeRefreshLicense(); }, leve ? 120000 : 60000);
     <% if (user && user.permissions.has('settings.edit')) { %>
     // Só quem pode instalar recebe o aviso: para o garçom seria um alerta que ele não
     // tem como resolver. O ciclo longo basta — a checagem em si é de hora em hora.
@@ -636,7 +664,21 @@
 <% if (user && !podeRenovarForaDoBloqueio) { %>
 <dialog x-ref="licenseBlockDlg" closedby="none"
         style="border:0;border-radius:16px;padding:0;box-shadow:var(--shadow-lg);width:min(780px,94vw);max-height:92vh;overflow-y:auto"
-        x-init="$watch('licenseStatus', v => { const abrir = v && (v.status === 'expirada' || v.status === 'bloqueada'); if (abrir) { $refs.licenseBlockDlg.showModal(); <% if (user.permissions.has('billing.view')) { %>loadRenewPlans();<% } %> } else { $refs.licenseBlockDlg.close(); } })"
+        x-init="$watch('licenseStatus', v => {
+          const dlg = $refs.licenseBlockDlg;
+          if (!dlg) return;
+          const abrir = v && (v.status === 'expirada' || v.status === 'bloqueada');
+          if (abrir) {
+            // A revalidação periódica recria o objeto de status. Sem o guarda, o
+            // showModal() em um diálogo já aberto lança InvalidStateError.
+            if (!dlg.open) {
+              dlg.showModal();
+              <% if (user.permissions.has('billing.view')) { %>loadRenewPlans();<% } %>
+            }
+          } else if (dlg.open) {
+            dlg.close();
+          }
+        })"
         @close.prevent="null">
   <div style="padding:1.35rem 1.45rem">
     <div style="display:grid;place-items:center;width:46px;height:46px;margin:0 auto .7rem;border-radius:14px;background:var(--danger-bg);color:var(--danger-text)">
