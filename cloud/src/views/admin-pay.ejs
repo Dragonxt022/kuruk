@@ -234,6 +234,9 @@
                       <td>
                         <div class="pay-actions">
                           <form method="post" action="/admin/pay/orders/<%= o.uuid %>/sync"><button class="btn secondary pay-btn-sm" type="submit">Atualizar</button></form>
+                          <% if (o.environment === 'teste' && !o.paid && ['creating','created','at_terminal','pending'].includes(o.status)) { %>
+                            <form method="post" action="/admin/pay/orders/<%= o.uuid %>/simulate"><button class="btn secondary pay-btn-sm" type="submit">Simular pago</button></form>
+                          <% } %>
                           <% if (o.paid && !o.refundedAmountCents) { %>
                             <form method="post" action="/admin/pay/orders/<%= o.uuid %>/refund" onsubmit="return confirm('Estornar esta cobrança no Mercado Pago?');"><button class="btn secondary pay-btn-sm" type="submit">Estornar</button></form>
                           <% } %>

@@ -29,6 +29,7 @@ export interface PayTerminalInfo {
   storeId: string | null;
   operatingMode: string | null;
   isDefault: boolean;
+  virtual?: boolean;
   syncedAt?: string;
 }
 
@@ -203,6 +204,17 @@ export async function getPointOrder(uuid: string): Promise<PayResult<{ order: Pa
 
 export async function cancelPointOrder(uuid: string): Promise<PayResult<{ ok: true; order: PayOrder | null }>> {
   return payRequest(`/orders/${encodeURIComponent(uuid)}/cancel`, { method: 'POST', body: {} }, 20_000);
+}
+
+/** Conclui a order no terminal virtual (somente ambiente de teste). */
+export async function simulatePointOrder(
+  uuid: string,
+  status: 'processed' | 'canceled' | 'expired' = 'processed',
+): Promise<PayResult<{ ok: true; order: PayOrder | null }>> {
+  return payRequest(`/orders/${encodeURIComponent(uuid)}/simulate`, {
+    method: 'POST',
+    body: { status },
+  }, 25_000);
 }
 
 export async function refundPointOrder(uuid: string): Promise<PayResult<{ ok: true; order: PayOrder | null }>> {

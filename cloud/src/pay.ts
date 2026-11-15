@@ -22,6 +22,19 @@ import { getPool } from './db';
 export const PAY_API_BASE = (process.env.MP_PAY_API_BASE ?? 'https://api.mercadopago.com').replace(/\/+$/, '');
 export const PAY_AUTH_BASE = (process.env.MP_PAY_AUTH_BASE ?? 'https://auth.mercadopago.com.br').replace(/\/+$/, '');
 
+/**
+ * Terminal virtual padrão do Mercado Pago para TESTE do Point.
+ *
+ * O MP não processa pagamento real em maquininha física com conta de teste. Em vez
+ * disso, oferece o dispositivo virtual de serial `SBX0000001`; o ID combina o
+ * `poi_type` com esse serial. A lista `/terminals/v1/list` pode não devolvê-lo, então
+ * ele é semeado sozinho quando a empresa usa o ambiente de teste.
+ */
+export const PAY_TEST_VIRTUAL_TERMINAL_ID = (
+  process.env.MP_PAY_VIRTUAL_TERMINAL_ID ?? 'NEWLAND_N950__SBX0000001'
+).trim();
+export const PAY_TEST_VIRTUAL_TERMINAL_NAME = 'Terminal virtual (teste)';
+
 const KEY_ENVIRONMENT = 'pay_environment';
 const KEY_CLIENT_ID = 'pay_client_id';
 const KEY_CLIENT_SECRET = 'pay_client_secret';
@@ -623,6 +636,20 @@ export async function syncPayTerminals(
   environment: PayEnvironment,
 ): Promise<PayTerminal[]> {
   const terminals = await listPayTerminalsFromMp(companyUuid, environment);
+  // No teste, o dispositivo virtual é o único jeito de concluir uma cobrança sem
+  // maquininha física. Ele entra mesmo que a lista do MP venha vazia.
+  if (environment === 'teste'
+    && !terminals.some((t) => t.terminalId === PAY_TEST_VIRTUAL_TERMINAL_ID)) {
+    terminals.push({
+      terminalId: PAY_TEST_VIRTUAL_TERMINAL_ID,
+      name: PAY_TEST_VIRTUAL_TERMINAL_NAME,
+      posId: null,
+      storeId: null,
+      externalPosId: null,
+      operatingMode: 'PDV',
+      raw: { virtual: true, serial: 'SBX0000001' },
+    });
+  }
   const ids = terminals.map((t) => t.terminalId);
   if (terminals.length) {
     for (const t of terminals) {
@@ -1016,6 +1043,46 @@ export async function refundPayOrder(uuid: string): Promise<PayOrderRow | null> 
         WHERE uuid = ?`,
       [uuid],
     );
+    return getPayOrderRow(uuid);
+  }
+}
+
+/**
+ * Simula o resultado de uma order no ambiente de TESTE.
+ *
+ * O Mercado Pago expõe `POST /v1/orders/{id}/events` para o dispositivo virtual. Sem
+ * isso, uma cobrança de teste ficaria eternamente em `at_terminal` (não existe cartão
+ * físico para passar). Nunca é permitido em produção.
+ */
+export async function simulatePayOrderEvent(
+  uuid: string,
+  event: 'processed' | 'canceled' | 'expired' | 'refunded',
+): Promise<PayOrderRow | null> {
+  const row = await getPayOrderRow(uuid);
+  if (!row) return null;
+  if (row.environment !== 'teste') {
+    throw new PayError('A simulação de pagamento só existe no ambiente de teste.');
+  }
+  if (!row.mp_order_id) throw new PayError('A cobrança ainda não chegou ao Mercado Pago.');
+  const body = event === 'processed'
+    ? {
+      status: 'processed',
+      status_detail: 'accredited',
+      payment_method_type: 'credit_card',
+      payment_method_id: 'visa',
+      installments: 1,
+    }
+    : { status: event };
+  await payApiForCompany(
+    row.company_uuid,
+    row.environment,
+    `/v1/orders/${encodeURIComponent(row.mp_order_id)}/events`,
+    { method: 'POST', body },
+  );
+  // O MP pode levar alguns segundos para refletir; a tela continua no polling.
+  try {
+    return await refreshPayOrder(uuid);
+  } catch {
     return getPayOrderRow(uuid);
   }
 }

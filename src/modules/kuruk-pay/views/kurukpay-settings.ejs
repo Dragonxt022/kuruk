@@ -191,6 +191,7 @@
                 </span>
               </div>
               <span class="pay-chip on" x-show="t.isDefault">padrão</span>
+              <span class="pay-chip warn" x-show="t.virtual" x-cloak>virtual (teste)</span>
               <button class="btn secondary" type="button" x-show="!t.isDefault" :disabled="!canManage || defaultBusy" @click="setDefault(t)">Usar este</button>
             </div>
           </template>
@@ -204,6 +205,10 @@
         <p class="hint" x-text="state.environment === 'teste'
           ? 'Envie um valor para o terminal de teste e confirme o recebimento antes de usar no PDV.'
           : 'Atenção: no ambiente de produção esta cobrança é REAL e cai na conta da loja.'"></p>
+        <p class="hint" x-show="state.environment === 'teste'">
+          Sem maquininha física de teste? Use o <strong>Terminal virtual (teste)</strong> e clique em
+          <strong>Simular aprovação</strong> na cobrança.
+        </p>
         <div class="pay-inline">
           <div class="pay-field">
             <label for="pay-amount">Valor</label>
@@ -237,6 +242,7 @@
             <h2 x-text="testStatusLabel()"></h2>
             <p class="hint" x-text="testStatusHint()"></p>
             <div class="pay-actions" x-show="!testOrder.paid && !testFinal" x-cloak>
+              <button class="btn secondary" type="button" @click="simulateOrder(testOrder)" x-show="state.environment === 'teste'">Simular aprovação</button>
               <button class="btn secondary" type="button" @click="cancelTest()">Cancelar cobrança</button>
             </div>
             <div class="pay-actions" x-show="testOrder.paid" x-cloak>
@@ -281,6 +287,7 @@
                 <td>
                   <div class="pay-actions">
                     <button class="btn secondary" type="button" x-show="!o.paid && ['creating','created','at_terminal','pending'].includes(o.status)" @click="cancelOrder(o)">Cancelar</button>
+                    <button class="btn secondary" type="button" x-show="!o.paid && state.environment === 'teste' && ['creating','created','at_terminal','pending'].includes(o.status)" @click="simulateOrder(o)">Simular pago</button>
                     <button class="btn secondary" type="button" x-show="o.paid && !o.refundedAmountCents && canRefund" @click="refundOrder(o)">Estornar</button>
                   </div>
                 </td>
@@ -575,6 +582,25 @@
           }
           if (this.testFinal) return this.testOrder.error || 'A cobrança não foi concluída. Tente novamente.';
           return 'Passe, insira ou aproxime o cartão no terminal. Não feche esta tela.';
+        },
+
+        async simulateOrder(o) {
+          if (!o || !this.state || this.state.environment !== 'teste') return;
+          this.error = ''; this.notice = '';
+          try {
+            const r = await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(o.uuid) + '/simulate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ status: 'processed' }),
+            });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Falha ao simular a aprovação.'; return; }
+            this.notice = 'Aprovação simulada. O Mercado Pago confirma em alguns segundos…';
+            if (this.testOrder && this.testOrder.uuid === o.uuid && d.order) this.testOrder = d.order;
+            await this.loadOrders();
+          } catch (e) {
+            this.error = 'Sem conexão com a nuvem.';
+          }
         },
 
         async cancelOrder(o) {

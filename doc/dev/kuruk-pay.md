@@ -58,6 +58,25 @@ Trocar o ambiente **não apaga** a conexão do outro: cada ambiente tem sua pró
 terminal padrão e histórico. O PDV usa o ambiente ativo da empresa e mostra um selo `TESTE`
 quando não é produção.
 
+## Como conectar o ambiente de teste
+
+1. No painel do Mercado Pago, abra o aplicativo **Kuruk-Pay** → **Credenciais de teste** e copie
+   **Client ID** e **Client Secret**.
+2. Em `/admin/pay`, cartão **Testes**, cole as duas chaves e salve.
+3. Crie uma **conta de teste vendedor** em *Suas integrações → Contas de teste* (o Mercado Pago
+   mostra usuário e senha).
+4. No app ou em `/m/pay`, troque para **Teste** e clique em **Conectar Mercado Pago (teste)**.
+   Faça login com a conta de teste — não use a conta real.
+5. Clique em **Sincronizar terminais**. O Kuruk Pay adiciona sozinho o
+   **Terminal virtual (teste)** (`NEWLAND_N950__SBX0000001`); é o dispositivo que o Mercado Pago
+   oferece para testes, porque conta de teste **não** processa pagamento em maquininha física.
+6. Faça uma cobrança de teste e clique em **Simular aprovação** (o Mercado Pago confirma em
+   alguns segundos). Também existe **Simular pago** no histórico do admin.
+7. Para voltar a vender de verdade, troque para **Produção** e conecte a conta real (se ainda
+   não estiver conectada).
+
+Observação: a simulação usa `POST /v1/orders/{id}/events`, que só funciona no ambiente de teste.
+
 ## Banco (cloud)
 
 Migration `0057_kuruk_pay`:

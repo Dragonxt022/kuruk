@@ -7,7 +7,8 @@ import {
   getPayOrderForCompany, getPayTerminals, listPayOrders, loadPayAppSettings,
   loadPayAppSettingsView, normalizePayEnvironment, payEnvironmentConfigured,
   refreshPayOrderIfStale, refundPayOrder, serializePayOrder, setCompanyPayEnvironment,
-  setDefaultPayTerminal, syncPayTerminals, type PayEnvironment,
+  setDefaultPayTerminal, simulatePayOrderEvent, syncPayTerminals,
+  PAY_TEST_VIRTUAL_TERMINAL_ID, type PayEnvironment,
 } from '../pay';
 
 /**
@@ -99,6 +100,7 @@ router.get('/', async (req: MobileRequest, res) => {
       storeId: t.store_id,
       operatingMode: t.operating_mode,
       isDefault: t.terminal_id === account?.default_terminal_id,
+      virtual: t.terminal_id === PAY_TEST_VIRTUAL_TERMINAL_ID,
     })),
     orders: orders.map(serializePayOrder),
     pedido: typeof req.query.pedido === 'string' ? req.query.pedido : null,
@@ -261,6 +263,23 @@ router.post('/pedidos/:uuid/estornar', async (req: MobileRequest, res) => {
   try {
     await refundPayOrder(uuid);
     res.redirect('/m/pay?ok=' + encodeURIComponent('Cobrança estornada.'));
+  } catch (e) {
+    res.redirect('/m/pay?erro=' + encodeURIComponent(friendlyPayMessage(e)));
+  }
+});
+
+/** Só no ambiente de teste: conclui a order no terminal virtual do Mercado Pago. */
+router.post('/pedidos/:uuid/simular', async (req: MobileRequest, res) => {
+  if (bloquear(req, res, 'cobrar')) return;
+  const uuid = String(req.params.uuid);
+  const owner = await getPayOrderForCompany(req.grant!.companyUuid, uuid);
+  if (!owner) {
+    res.redirect('/m/pay?erro=' + encodeURIComponent('Cobrança não encontrada.'));
+    return;
+  }
+  try {
+    await simulatePayOrderEvent(uuid, 'processed');
+    res.redirect('/m/pay?pedido=' + encodeURIComponent(uuid) + '&ok=' + encodeURIComponent('Aprovação simulada. Aguardando o Mercado Pago confirmar.'));
   } catch (e) {
     res.redirect('/m/pay?erro=' + encodeURIComponent(friendlyPayMessage(e)));
   }

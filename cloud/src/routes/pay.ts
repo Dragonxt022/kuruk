@@ -7,7 +7,8 @@ import {
   getPayTerminals, listPayOrders, loadPayAppSettings, loadPayAppSettingsView,
   normalizePayEnvironment, payCallbackUrl, payEnvironmentConfigured, refreshPayOrderIfStale,
   refundPayOrder, savePayAccount, serializePayOrder, setCompanyPayEnvironment,
-  setDefaultPayTerminal, syncPayTerminals,
+  setDefaultPayTerminal, simulatePayOrderEvent, syncPayTerminals,
+  PAY_TEST_VIRTUAL_TERMINAL_ID,
   type PayEnvironment, type PayOrderOrigin, type PayTerminalRow,
 } from '../pay';
 
@@ -54,6 +55,7 @@ function terminalView(t: PayTerminalRow, defaultId: string | null) {
     storeId: t.store_id,
     operatingMode: t.operating_mode,
     isDefault: t.terminal_id === defaultId,
+    virtual: t.terminal_id === PAY_TEST_VIRTUAL_TERMINAL_ID,
     syncedAt: new Date(t.synced_at as string).toISOString(),
   };
 }
@@ -230,6 +232,7 @@ router.post('/terminals/sync', requireCompanyAuth, async (req: AuthedRequest, re
         posId: t.posId,
         storeId: t.storeId,
         operatingMode: t.operatingMode,
+        virtual: t.terminalId === PAY_TEST_VIRTUAL_TERMINAL_ID,
       })),
       defaultTerminalId: updated?.default_terminal_id ?? null,
     });
@@ -349,6 +352,25 @@ router.post('/orders/:uuid/refund', requireCompanyAuth, async (req: AuthedReques
   }
   try {
     const row = await refundPayOrder(uuid);
+    res.json({ ok: true, order: row ? serializePayOrder(row) : null });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+router.post('/orders/:uuid/simulate', requireCompanyAuth, async (req: AuthedRequest, res) => {
+  const uuid = String(req.params.uuid);
+  const owner = await companyOrder(req.companyUuid!, uuid);
+  if (!owner) {
+    res.status(404).json({ error: 'Cobrança não encontrada.' });
+    return;
+  }
+  const raw = String((req.body ?? {}).status ?? 'processed');
+  const allowed = ['processed', 'canceled', 'expired', 'refunded'] as const;
+  type SimStatus = (typeof allowed)[number];
+  const status: SimStatus = (allowed as readonly string[]).includes(raw) ? (raw as SimStatus) : 'processed';
+  try {
+    const row = await simulatePayOrderEvent(uuid, status);
     res.json({ ok: true, order: row ? serializePayOrder(row) : null });
   } catch (e) {
     fail(res, e);

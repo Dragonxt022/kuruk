@@ -1026,6 +1026,8 @@
         <p class="error" x-show="point.error" x-cloak x-text="point.error"></p>
       </div>
       <div class="actions">
+        <button type="button" class="btn secondary" x-show="point.charging && point.environment === 'teste' && point.orderUuid"
+                @click="simulatePointCharge()">Simular aprovação (teste)</button>
         <button type="button" class="btn secondary" x-show="point.charging" @click="cancelPointCharge()">Cancelar cobrança</button>
         <button type="button" class="btn" x-show="!point.charging" @click="$refs.pointDlg.close()">Fechar</button>
       </div>
@@ -2837,6 +2839,22 @@
           this.point.error = '';
           this.payError = '';
           try { this.$refs.pointDlg.close(); } catch (e) { /* já fechado */ }
+        },
+        /** Só no teste: conclui a order no terminal virtual do Mercado Pago. */
+        async simulatePointCharge() {
+          const uuid = this.point.orderUuid;
+          if (!uuid) return;
+          this.point.label = 'Simulando aprovação…';
+          this.point.error = '';
+          try {
+            await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(uuid) + '/simulate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ status: 'processed' }),
+            });
+          } catch (e) {
+            this.point.error = 'Falha ao simular a aprovação.';
+          }
         },
         async addPayment() {
           const method = this.selectedMethod();

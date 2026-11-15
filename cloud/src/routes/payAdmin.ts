@@ -4,7 +4,7 @@ import {
   disconnectPayAccount, friendlyPayMessage, getPayAccount, listPayAccountsForAdmin,
   listPayOrdersForAdmin, loadPayAppSettingsView, normalizePayEnvironment, refreshPayOrder,
   refundPayOrder, savePayAppSettings, serializePayOrder, setCompanyPayEnvironment,
-  setPayDefaultEnvironment,
+  setPayDefaultEnvironment, simulatePayOrderEvent,
 } from '../pay';
 
 /**
@@ -106,6 +106,15 @@ router.post('/pay/orders/:uuid/refund', requireAdminAuth, async (req, res) => {
   try {
     await refundPayOrder(String(req.params.uuid));
     res.redirect('/admin/pay?ok=' + encodeURIComponent('Cobrança estornada.'));
+  } catch (e) {
+    res.redirect('/admin/pay?error=' + encodeURIComponent(friendlyPayMessage(e)));
+  }
+});
+
+router.post('/pay/orders/:uuid/simulate', requireAdminAuth, async (req, res) => {
+  try {
+    await simulatePayOrderEvent(String(req.params.uuid), 'processed');
+    res.redirect('/admin/pay?ok=' + encodeURIComponent('Pagamento de teste simulado como aprovado.'));
   } catch (e) {
     res.redirect('/admin/pay?error=' + encodeURIComponent(friendlyPayMessage(e)));
   }

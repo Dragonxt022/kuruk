@@ -3,7 +3,8 @@ import { requirePermission } from '../../core/permissions/middleware';
 import {
   cancelPointOrder, connectPayAccount, createPointOrder, disconnectPayAccount,
   fetchPayAccount, fetchPayOrders, fetchPointConfig, getPointOrder, refundPointOrder,
-  setDefaultPayTerminal, switchPayEnvironment, syncPayTerminals, type PayResult,
+  setDefaultPayTerminal, simulatePointOrder, switchPayEnvironment, syncPayTerminals,
+  type PayResult,
 } from './cloud';
 
 /**
@@ -113,6 +114,13 @@ router.get('/orders/:uuid', requireCharge, async (req, res) => {
 
 router.post('/orders/:uuid/cancel', requireCharge, async (req, res) => {
   send(res, await cancelPointOrder(String(req.params.uuid)));
+});
+
+router.post('/orders/:uuid/simulate', requireCharge, async (req, res) => {
+  const status = (req.body ?? {}).status === 'canceled'
+    ? 'canceled'
+    : (req.body ?? {}).status === 'expired' ? 'expired' : 'processed';
+  send(res, await simulatePointOrder(String(req.params.uuid), status));
 });
 
 router.post('/orders/:uuid/refund', requirePermission('kurukpay.orders.refund'), async (req, res) => {

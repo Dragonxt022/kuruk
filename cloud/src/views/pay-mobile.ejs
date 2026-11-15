@@ -103,6 +103,11 @@
       </div>
     </div>
     <div class="paym-actions">
+      <% if (environment === 'teste') { %>
+        <form method="post" action="/m/pay/pedidos/<%= pedido %>/simular">
+          <button class="m-btn" type="submit">Simular aprovação</button>
+        </form>
+      <% } %>
       <form method="post" action="/m/pay/pedidos/<%= pedido %>/cancelar">
         <button class="m-btn m-btn-sec" type="submit">Cancelar cobrança</button>
       </form>
@@ -176,6 +181,7 @@
               <% if (t.posId) { %>· PDV <%= t.posId %><% } %>
               <% if (t.operatingMode) { %>· <%= t.operatingMode %><% } %>
             </span>
+            <% if (t.virtual) { %><span class="paym-chip warn" style="margin-top:4px">virtual (teste)</span><% } %>
           </div>
           <% if (t.isDefault) { %>
             <span class="paym-chip on">padrão</span>
@@ -240,6 +246,11 @@
             <span class="paym-chip <%= cls %>" style="margin-top:6px"><%= label %></span>
             <% if (!o.paid && canCharge && ['created','at_terminal','creating','pending'].indexOf(o.status) >= 0) { %>
               <div class="paym-actions">
+                <% if (environment === 'teste') { %>
+                  <form method="post" action="/m/pay/pedidos/<%= o.uuid %>/simular">
+                    <button class="m-btn" type="submit">Simular aprovação</button>
+                  </form>
+                <% } %>
                 <form method="post" action="/m/pay/pedidos/<%= o.uuid %>/cancelar">
                   <button class="m-btn m-btn-sec" type="submit">Cancelar</button>
                 </form>
