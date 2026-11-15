@@ -17,7 +17,7 @@
     .pay-card .hint { margin: 0 0 16px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
     .pay-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
     .pay-field label { font-size: .78rem; font-weight: 700; color: var(--muted); }
-    .pay-field input { width: 100%; }
+    .pay-field input { width: 100%; margin-bottom: 0; }
     .pay-copy { display: flex; gap: 8px; align-items: center; }
     .pay-copy code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 9px 11px; border-radius: 8px; background: var(--surface-hover); font-size: .74rem; }
     .badge-line { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
@@ -107,7 +107,7 @@
 
                 <div class="pay-field">
                   <label for="pay-client-id-<%= e.environment %>">Client ID</label>
-                  <input id="pay-client-id-<%= e.environment %>" name="clientId" value="<%= e.clientId || '' %>"
+                  <input id="pay-client-id-<%= e.environment %>" name="clientId" type="text" value="<%= e.clientId || '' %>"
                          placeholder="5049718943825028" autocomplete="off" autocapitalize="off" spellcheck="false" />
                 </div>
                 <div class="pay-field">

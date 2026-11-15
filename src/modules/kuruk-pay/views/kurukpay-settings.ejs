@@ -38,7 +38,7 @@
     .pay-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .pay-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
     .pay-field label { font-size: .75rem; font-weight: 700; color: var(--text-muted); }
-    .pay-field input, .pay-field select { width: 100%; }
+    .pay-field input, .pay-field select { width: 100%; margin-bottom: 0; }
     .pay-term {
       display: flex; align-items: center; gap: 12px; padding: 12px 0;
       border-bottom: 1px solid var(--border-light);
@@ -63,6 +63,7 @@
     .pay-steps { margin: 0; padding-left: 18px; color: var(--text-muted); font-size: .8rem; line-height: 1.75; }
     .pay-inline { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
     .pay-inline > .pay-field { flex: 1 1 150px; margin-bottom: 0; }
+    .pay-hint-link { color: var(--primary); font-weight: 600; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -136,7 +137,7 @@
             A janela do Mercado Pago foi aberta. Depois de autorizar, esta tela atualiza sozinha.
           </p>
           <p class="hint" style="margin-top:12px" x-show="connectUrl" x-cloak>
-            Se a janela não abriu, <a :href="connectUrl" target="_blank" rel="noopener">clique aqui para autorizar no Mercado Pago</a>.
+            Se a janela não abriu, <a class="pay-hint-link" :href="connectUrl" target="_blank" rel="noopener">clique aqui para autorizar no Mercado Pago</a>.
           </p>
           <p class="hint" style="margin-top:12px" x-show="!canManage">
             Seu usuário pode ver a conexão, mas não alterá-la.
@@ -206,11 +207,11 @@
         <div class="pay-inline">
           <div class="pay-field">
             <label for="pay-amount">Valor</label>
-            <input id="pay-amount" x-model="test.amount" inputmode="decimal" placeholder="0,00" autocomplete="off" />
+            <input id="pay-amount" type="text" x-model="test.amount" inputmode="decimal" placeholder="0,00" autocomplete="off" />
           </div>
           <div class="pay-field">
             <label for="pay-desc">Descrição</label>
-            <input id="pay-desc" x-model="test.description" maxlength="120" placeholder="Cobrança de teste" />
+            <input id="pay-desc" type="text" x-model="test.description" maxlength="120" placeholder="Cobrança de teste" />
           </div>
           <div class="pay-field">
             <label for="pay-terminal">Terminal</label>
