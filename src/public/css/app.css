@@ -4118,6 +4118,286 @@ a.btn-full {
   background: var(--primary-bg);
 }
 
+/* ─── Leitor de mensagem (central + aviso urgente) ──────────────────────────────
+   O corpo vem do editor do painel cloud (HTML). Aqui ele ganha a mesma tipografia
+   que o compositor mostra: títulos, listas, citações, links. Sem isto, um <h2> e um
+   <p> ficavam com o mesmo tamanho e o texto "perdia" a formatação. */
+dialog.msg-dialog {
+  width: min(680px, calc(100vw - 2rem));
+  max-width: 680px;
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  overflow: hidden;
+}
+dialog.msg-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.msg-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.5rem 1.5rem 0.9rem;
+  overscroll-behavior: contain;
+}
+.msg-dialog-body > h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.38rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.msg-dialog-sub {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.msg-hero {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  background: var(--surface-hover);
+  margin: 1rem auto;
+}
+.msg-dialog-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  flex-wrap: wrap;
+  padding: 0.8rem 1.5rem;
+  border-top: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+.msg-dialog-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+.msg-dialog-brand img {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+}
+.msg-dialog-brand strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.82rem;
+  letter-spacing: -0.01em;
+}
+.msg-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.msg-dialog-actions .select {
+  width: auto;
+  max-width: 210px;
+  margin: 0;
+  font-size: 0.82rem;
+  padding: 0.4rem 1.9rem 0.4rem 0.6rem;
+}
+
+/* Tipografia do corpo da mensagem. */
+.msg-read,
+.urgent-read {
+  font-size: 0.94rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.msg-read > :first-child,
+.urgent-read > :first-child {
+  margin-top: 0;
+}
+.msg-read > :last-child,
+.urgent-read > :last-child {
+  margin-bottom: 0;
+}
+.msg-read p,
+.urgent-read p {
+  margin: 0.7em 0;
+}
+.msg-read h1,
+.msg-read h2,
+.msg-read h3,
+.msg-read h4,
+.urgent-read h1,
+.urgent-read h2,
+.urgent-read h3,
+.urgent-read h4 {
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1.05em 0 0.4em;
+}
+.msg-read h1,
+.urgent-read h1 {
+  font-size: 1.42rem;
+}
+.msg-read h2,
+.urgent-read h2 {
+  font-size: 1.22rem;
+}
+.msg-read h3,
+.urgent-read h3 {
+  font-size: 1.06rem;
+}
+.msg-read h4,
+.urgent-read h4 {
+  font-size: 0.98rem;
+}
+.msg-read strong,
+.msg-read b,
+.urgent-read strong,
+.urgent-read b {
+  color: var(--text);
+  font-weight: 700;
+}
+.msg-read em,
+.msg-read i,
+.urgent-read em,
+.urgent-read i {
+  font-style: italic;
+}
+.msg-read u,
+.urgent-read u {
+  text-decoration: underline;
+}
+.msg-read s,
+.urgent-read s {
+  text-decoration: line-through;
+}
+.msg-read ul,
+.msg-read ol,
+.urgent-read ul,
+.urgent-read ol {
+  margin: 0.6em 0;
+  padding-left: 1.4rem;
+}
+.msg-read li,
+.urgent-read li {
+  margin: 0.25em 0;
+}
+.msg-read li > p,
+.urgent-read li > p {
+  margin: 0.2em 0;
+}
+.msg-read a,
+.urgent-read a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.msg-read blockquote,
+.urgent-read blockquote {
+  margin: 0.8em 0;
+  padding: 0.5em 0.9em;
+  border-left: 3px solid var(--primary);
+  background: var(--surface-hover);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-secondary);
+}
+.msg-read hr,
+.urgent-read hr {
+  border: 0;
+  border-top: 1px solid var(--border-light);
+  margin: 1em 0;
+}
+.msg-read code,
+.urgent-read code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  padding: 0.08em 0.35em;
+}
+.msg-read pre,
+.urgent-read pre {
+  margin: 0.8em 0;
+  padding: 0.75rem 0.9rem;
+  overflow-x: auto;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+}
+.msg-read pre code,
+.urgent-read pre code {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.msg-read table,
+.urgent-read table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.9em;
+}
+.msg-read th,
+.msg-read td,
+.urgent-read th,
+.urgent-read td {
+  border: 1px solid var(--border-light);
+  padding: 0.4em 0.55em;
+  text-align: left;
+  vertical-align: top;
+}
+.msg-read th,
+.urgent-read th {
+  background: var(--surface-hover);
+  font-weight: 600;
+}
+.msg-read img,
+.urgent-read img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  margin: 0.8em auto;
+}
+@media (max-width: 560px) {
+  .msg-dialog-body {
+    padding: 1.15rem 1.1rem 0.75rem;
+  }
+  .msg-dialog-footer {
+    padding: 0.7rem 1.1rem;
+  }
+  .msg-dialog-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .msg-dialog-actions .btn,
+  .msg-dialog-actions .select {
+    flex: 1;
+    max-width: none;
+  }
+  .msg-hero {
+    max-height: 220px;
+  }
+}
+
 /* ─── Badge variant ─── */
 .badge-info {
   background: var(--primary-bg);

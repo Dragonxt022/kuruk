@@ -19,6 +19,17 @@ const router = Router();
 
 const CATEGORIES = ['comunicado', 'atualizacao', 'tutorial', 'dica', 'novidade', 'sistema'] as const;
 
+interface MessageViewRow {
+  company_uuid: string;
+  company_name: string | null;
+  user_key: string;
+  user_name: string;
+  device_name: string | null;
+  view_count: number;
+  first_viewed_at: Date | string;
+  last_viewed_at: Date | string;
+}
+
 const EXT_POR_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -73,9 +84,22 @@ router.get('/', requireAdminAuth, async (req, res) => {
     list.push({ company_uuid: t.company_uuid, company_name: t.company_name });
     targets.set(Number(t.message_id), list);
   }
+  const [viewRows] = await pool.query(
+    `SELECT v.message_id, v.company_uuid, c.name AS company_name, v.user_key, v.user_name,
+            v.device_name, v.view_count, v.first_viewed_at, v.last_viewed_at
+       FROM message_views v LEFT JOIN companies c ON c.company_uuid = v.company_uuid
+      ORDER BY v.last_viewed_at DESC`,
+  );
+  const views = new Map<number, MessageViewRow[]>();
+  for (const v of viewRows as (MessageViewRow & { message_id: number })[]) {
+    const list = views.get(Number(v.message_id)) ?? [];
+    list.push(v);
+    views.set(Number(v.message_id), list);
+  }
   res.render('messages', {
     messages: rows,
     targets,
+    views,
     active: 'messages',
     error: typeof req.query.error === 'string' ? req.query.error : null,
     ok: typeof req.query.ok === 'string' ? req.query.ok : null,
@@ -239,6 +263,7 @@ router.post('/:uuid/delete', requireAdminAuth, async (req, res) => {
   const msg = (rows as { id: number; image_path: string | null }[])[0];
   if (msg) {
     await pool.query('DELETE FROM message_targets WHERE message_id = ?', [msg.id]);
+    await pool.query('DELETE FROM message_views WHERE message_id = ?', [msg.id]);
     await pool.query('DELETE FROM messages WHERE id = ?', [msg.id]);
     deleteImageFile(msg.image_path);
   }

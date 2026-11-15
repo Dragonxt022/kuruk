@@ -178,7 +178,7 @@
     for (const m of this.unreadMessages) {
       m.read = true;
       fetch('/api/messages/' + encodeURIComponent(m.uuid) + '/read', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: true }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: true, view: false }),
       }).catch(() => {});
     }
     window.dispatchEvent(new CustomEvent('kuruk-messages-changed'));

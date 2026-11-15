@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   listForUser,
   markRead,
+  reportView,
   setFavorite,
   dismiss,
   assignCategory,
@@ -47,10 +48,15 @@ router.get('/image/:uuid', async (req, res) => {
   res.send(Buffer.from(img.b64, 'base64'));
 });
 
-const readSchema = z.object({ read: z.boolean().optional() });
+const readSchema = z.object({ read: z.boolean().optional(), view: z.boolean().optional() });
 router.post('/:uuid/read', validateBody(readSchema), (req, res) => {
   assertAuth(req);
-  markRead(req.user.id, String(req.params.uuid), req.body.read !== false);
+  const read = req.body.read !== false;
+  markRead(req.user.id, String(req.params.uuid), read);
+  // Recado para a nuvem só quando a mensagem passa a lida: é o "quem visualizou" que o
+  // suporte acompanha. Desmarcar como lida não apaga o recibo (a pessoa já viu). O lote
+  // "marcar todas como lidas" manda view=false — marcar em massa não é abrir.
+  if (read && req.body.view !== false) void reportView(String(req.params.uuid), req.user);
   res.json({ ok: true });
 });
 

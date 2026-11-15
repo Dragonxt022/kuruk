@@ -8,15 +8,49 @@
   <link rel="icon" type="image/png" href="/logo_kuruk-icon.png">
   <%- include('partials/styles') %>
   <style>
-    .msg-card { display: flex; gap: 14px; align-items: flex-start; }
+    .msg-card { display: flex; gap: 16px; align-items: flex-start; }
     .msg-card-body { flex: 1; min-width: 0; }
-    .msg-card-body h2 { margin: 0; font-size: 17px; }
+    .msg-card-body h2 { margin: 0; font-size: 17px; line-height: 1.3; }
     .msg-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; margin-top: 6px; }
     .msg-actions { display: flex; gap: 8px; flex: none; flex-wrap: wrap; }
     .msg-actions form { margin: 0; }
     .badge.urgent { background: #fee2e2; color: #b91c1c; }
     .badge.pub { background: #dcfce7; color: #15803d; }
     .badge.draft { background: #f4f4f5; color: #52525b; }
+    .badge.views { background: #eef2ff; color: #4338ca; }
+    .badge.views.none { background: #f4f4f5; color: #71717a; }
+
+    .msg-views { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-light); }
+    .msg-views summary {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12.5px; font-weight: 600; color: var(--muted);
+      cursor: pointer; list-style: none; user-select: none;
+    }
+    .msg-views summary::-webkit-details-marker { display: none; }
+    .msg-views summary:hover { color: var(--text); }
+    .msg-views summary .chev { transition: transform .15s; }
+    .msg-views[open] summary .chev { transform: rotate(90deg); }
+    .msg-views ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+    .msg-view-item {
+      display: grid; grid-template-columns: 30px minmax(0, 1fr) auto;
+      gap: 10px; align-items: center;
+      padding: 8px 10px; border-radius: 10px; background: var(--surface-hover);
+    }
+    .msg-view-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: var(--primary-soft); color: var(--primary);
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+    }
+    .msg-view-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .msg-view-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .msg-view-when { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+    @media (max-width: 760px) {
+      .msg-card { flex-direction: column; }
+      .msg-actions { width: 100%; }
+      .msg-view-item { grid-template-columns: 30px minmax(0, 1fr); }
+      .msg-view-when { grid-column: 2; text-align: left; }
+    }
   </style>
 </head>
 <body>
@@ -27,7 +61,10 @@
 
       <div class="page">
         <div class="page-header">
-          <h1>Mensagens</h1>
+          <div>
+            <h1>Mensagens</h1>
+            <p class="page-subtitle">Comunicados, tutoriais e avisos enviados às lojas — com o retorno de quem já visualizou.</p>
+          </div>
           <a class="btn" href="/admin/messages/new">+ Nova mensagem</a>
         </div>
 
@@ -40,9 +77,10 @@
 
         <div class="card">
           <p class="card-intro" style="margin:0">
-            Escreva comunicados, tutoriais e dicas para as lojas. A mensagem aparece na tela
-            <strong>Notificações</strong> do Kuruk. Marque <strong>urgente</strong> para ela abrir
-            como aviso na tela inicial. A entrega é automática — a loja recebe no próximo sync.
+            A mensagem aparece na tela <strong>Notificações</strong> do Kuruk. Marque
+            <strong>urgente</strong> para ela abrir como aviso na tela inicial. A entrega é
+            automática — a loja recebe no próximo sync. Abaixo de cada mensagem você vê
+            <strong>quem abriu</strong> no aplicativo.
           </p>
         </div>
 
@@ -52,18 +90,24 @@
 
         <% messages.forEach(function(m) { %>
           <% var lista = targets.get(Number(m.id)) || []; %>
+          <% var vistas = (typeof views !== 'undefined' && views.get(Number(m.id))) || []; %>
           <div class="card">
             <div class="msg-card">
               <div class="msg-card-body">
                 <h2><%= m.title %></h2>
                 <% if (m.subtitle) { %><p class="cell-muted" style="margin:.2rem 0 0"><%= m.subtitle %></p><% } %>
                 <div class="msg-meta">
-                  <span class="badge"><%= m.category %></span>
+                  <span class="badge"><%= m.category.charAt(0).toUpperCase() + m.category.slice(1) %></span>
                   <% if (m.is_urgent) { %><span class="badge urgent">Urgente</span><% } %>
                   <% if (m.status === 'publicada') { %>
                     <span class="badge pub">Publicada</span>
                   <% } else { %>
                     <span class="badge draft">Rascunho</span>
+                  <% } %>
+                  <% if (vistas.length) { %>
+                    <span class="badge views"><%= vistas.length %> <%= vistas.length === 1 ? 'visualização' : 'visualizações' %></span>
+                  <% } else { %>
+                    <span class="badge views none">Sem visualizações</span>
                   <% } %>
                   <span class="cell-muted">
                     · <%= m.target_all ? 'Todas as empresas' : (lista.length + ' empresa(s)') %>
@@ -75,6 +119,43 @@
                     Para: <%= lista.map(function(t){ return t.company_name || t.company_uuid; }).join(', ') %>
                   </p>
                 <% } %>
+
+                <details class="msg-views">
+                  <summary>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    <% if (vistas.length) { %>
+                      Quem visualizou (<%= vistas.length %>)
+                    <% } else { %>
+                      Ninguém visualizou ainda
+                    <% } %>
+                  </summary>
+                  <% if (vistas.length) { %>
+                    <ul>
+                      <% vistas.forEach(function(v) { %>
+                        <% var inicial = String(v.user_name || v.user_key || '?').trim().charAt(0) || '?'; %>
+                        <li class="msg-view-item">
+                          <span class="msg-view-avatar"><%= inicial %></span>
+                          <span style="min-width:0">
+                            <span class="msg-view-name" title="<%= v.user_name || v.user_key %>"><%= v.user_name || v.user_key %></span>
+                            <span class="msg-view-sub" title="<%= v.company_name || v.company_uuid %>">
+                              <%= v.company_name || v.company_uuid %><% if (v.device_name) { %> · <%= v.device_name %><% } %>
+                            </span>
+                          </span>
+                          <span class="msg-view-when">
+                            <%= String(v.last_viewed_at).slice(0, 16) %>
+                            <% if (Number(v.view_count) > 1) { %><br><span title="Quantas vezes abriu"><%= v.view_count %> aberturas</span><% } %>
+                          </span>
+                        </li>
+                      <% }); %>
+                    </ul>
+                  <% } else { %>
+                    <p class="cell-muted" style="margin:.5rem 0 0; font-size:12px">
+                      <%= m.status === 'publicada'
+                        ? 'A mensagem está publicada, mas nenhum usuário abriu no aplicativo até agora.'
+                        : 'Publique a mensagem para começar a acompanhar as visualizações.' %>
+                    </p>
+                  <% } %>
+                </details>
               </div>
               <div class="msg-actions">
                 <a class="btn secondary small" href="/admin/messages/<%= m.uuid %>/edit">Editar</a>

@@ -61,6 +61,48 @@ router.get('/inbox', requireCompanyAuth, async (req: AuthedRequest, res) => {
   });
 });
 
+/**
+ * Recibo de leitura. O servidor local da loja chama quando um usuário abre a mensagem
+ * (ou confirma o aviso urgente). Não é o estado de leitura do aparelho — é o "quem viu"
+ * que o suporte acompanha no painel. Reabrir atualiza `last_viewed_at` e soma a contagem.
+ */
+router.post('/:uuid/view', requireCompanyAuth, async (req: AuthedRequest, res) => {
+  const body = (req.body ?? {}) as { userKey?: unknown; userName?: unknown; deviceName?: unknown };
+  const userKey = String(body.userKey ?? '').trim().slice(0, 120);
+  const userName = String(body.userName ?? '').trim().slice(0, 160) || userKey;
+  const deviceName = String(body.deviceName ?? '').trim().slice(0, 160) || null;
+
+  if (!userKey) {
+    res.status(400).json({ error: 'Informe o usuário que visualizou.' });
+    return;
+  }
+
+  const pool = getPool();
+  const [rows] = await pool.query(`SELECT m.id FROM messages m WHERE m.uuid = ? AND ${VISIVEL_SQL}`, [
+    req.params.uuid,
+    req.companyUuid,
+  ]);
+  const msg = (rows as { id: number }[])[0];
+  if (!msg) {
+    res.status(404).json({ error: 'Mensagem não encontrada.' });
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO message_views
+       (message_id, company_uuid, user_key, user_name, device_name, view_count, first_viewed_at, last_viewed_at)
+     VALUES (?, ?, ?, ?, ?, 1, NOW(3), NOW(3))
+     ON DUPLICATE KEY UPDATE
+       user_name = VALUES(user_name),
+       device_name = VALUES(device_name),
+       view_count = view_count + 1,
+       last_viewed_at = NOW(3)`,
+    [msg.id, req.companyUuid, userKey, userName, deviceName],
+  );
+
+  res.json({ ok: true });
+});
+
 router.get('/:uuid/image', requireCompanyAuth, async (req: AuthedRequest, res) => {
   const [rows] = await getPool().query(
     `SELECT m.image_path, m.image_mime FROM messages m WHERE m.uuid = ? AND ${VISIVEL_SQL}`,

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import { getSqlite } from '../database/connection';
 import { cloudBaseUrl, cloudAuthHeaders } from '../catalog/submissionQueue';
 import { createLogger } from '../logger';
@@ -201,6 +202,35 @@ export function markRead(userId: number, uuid: string, read: boolean): void {
         WHERE message_uuid = ? AND user_id = ?`,
     )
     .run(uuid, userId);
+}
+
+/**
+ * Recibo de leitura para o painel do suporte. O estado lido/favorito continua só no
+ * aparelho; isto é outro dado: "quem abriu" aquela mensagem naquela loja. Chamado depois
+ * que o usuário abre a mensagem (ou confirma o aviso urgente). Falha em silêncio — sem
+ * nuvem, o app não pode travar a leitura por causa do recibo.
+ */
+export async function reportView(
+  uuid: string,
+  viewer: { username: string; name?: string | null },
+): Promise<void> {
+  const base = cloudBaseUrl();
+  const auth = cloudAuthHeaders();
+  if (!base || !auth) return;
+  try {
+    await fetch(`${base}/api/messages/${encodeURIComponent(uuid)}/view`, {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userKey: viewer.username,
+        userName: viewer.name || viewer.username,
+        deviceName: os.hostname(),
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) {
+    log.info(`não deu para registrar a visualização de ${uuid} (${(e as Error).message}).`);
+  }
 }
 
 export function setFavorite(userId: number, uuid: string, favorite: boolean): void {
