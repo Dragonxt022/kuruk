@@ -42,7 +42,7 @@
 </head>
 <body>
   <%- include('partials/nav', { user, page: '/admin/integracoes' }) %>
-  <main x-data="integrationsPage(<%= canCheckMd ? 'true' : 'false' %>)" x-init="load()">
+  <main x-data="integrationsPage(<%= canCheckMd ? 'true' : 'false' %>, <%= canCheckPay ? 'true' : 'false' %>)" x-init="load()">
     <h1>Integrações</h1>
     <p class="muted muted-block">
       Conecte o Kuruk a outros serviços. Cada integração fica em uma linha própria, com
@@ -75,6 +75,29 @@
         </div>
       </section>
 
+      <section class="integration-card">
+        <span class="integration-logo" style="background:linear-gradient(135deg,#009ee3,#0072bc);color:#fff">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+        </span>
+        <div class="integration-body">
+          <div class="integration-title">
+            <h2>Kuruk Pay</h2>
+            <span class="badge" :class="payConnected() ? 'ok' : 'off'" x-text="payStatusLabel()"></span>
+          </div>
+          <p>Receba na maquininha Mercado Pago Point usando a conta da sua loja. O dinheiro cai direto nela.</p>
+          <div class="integration-meta" x-show="pay && pay.connected" x-cloak>
+            <span class="chip" x-text="payAccountLabel()"></span>
+            <span class="chip" x-text="pay && pay.environment === 'teste' ? 'Teste' : 'Produção'"></span>
+            <span class="chip" x-text="((pay && pay.terminals ? pay.terminals.length : 0)) + ' terminal(is)'"></span>
+          </div>
+        </div>
+        <div class="integration-actions">
+          <% if (user.permissions.has('kurukpay.settings.view')) { %>
+          <a class="btn" href="/app/kuruk-pay">Configurar</a>
+          <% } %>
+        </div>
+      </section>
+
       <section class="integration-card placeholder">
         <span class="integration-logo">+</span>
         <div class="integration-body">
@@ -88,16 +111,25 @@
     </div>
   </main>
   <script nonce="<%= cspNonce %>">
-    function integrationsPage(canCheck) {
+    function integrationsPage(canCheck, canCheckPay) {
       return {
         canCheck,
+        canCheckPay,
         md: null,
+        pay: null,
         async load() {
-          if (!this.canCheck) return;
-          try {
-            const r = await fetch('/api/maisdelivery/settings');
-            if (r.ok) this.md = await r.json();
-          } catch (e) { /* status best-effort: a tela de configuração mostra o detalhe */ }
+          if (this.canCheck) {
+            try {
+              const r = await fetch('/api/maisdelivery/settings');
+              if (r.ok) this.md = await r.json();
+            } catch (e) { /* status best-effort: a tela de configuração mostra o detalhe */ }
+          }
+          if (this.canCheckPay) {
+            try {
+              const r = await fetch('/api/kuruk-pay/account');
+              if (r.ok) this.pay = await r.json();
+            } catch (e) { /* status best-effort */ }
+          }
         },
         mdConfigured() {
           const c = this.md;
@@ -107,6 +139,19 @@
           if (!this.canCheck) return 'Configuração restrita';
           if (!this.md) return 'Consultando…';
           return this.mdConfigured() ? 'Configurado' : 'Não configurado';
+        },
+        payConnected() {
+          return !!(this.pay && this.pay.connected);
+        },
+        payStatusLabel() {
+          if (!this.canCheckPay) return 'Configuração restrita';
+          if (!this.pay) return 'Consultando…';
+          if (this.pay.connected) return 'Conectado';
+          return this.pay.configured ? 'Não conectado' : 'Indisponível';
+        },
+        payAccountLabel() {
+          const a = this.pay && this.pay.account;
+          return (a && (a.nickname || a.email)) || 'Mercado Pago';
         },
       };
     }

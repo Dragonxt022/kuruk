@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { getPayment, loadSettings, mapPaymentStatus, verifyWebhookSignature } from '../gateway';
+import {
+  handlePayOrderNotification, loadPayAppSettings,
+} from '../pay';
 import { getCharge, getChargeByPaymentId, savePaymentSnapshot, settleCharge } from '../charges';
 import {
   getSubscriptionByPreapprovalId,
@@ -41,7 +44,11 @@ async function chargeFromReference(reference: string | null): Promise<number | n
 
 router.post('/mercadopago', async (req, res) => {
   const query = req.query as Record<string, unknown>;
-  const body = (req.body ?? {}) as { type?: string; action?: string; data?: { id?: string | number } };
+  const body = (req.body ?? {}) as {
+    type?: string;
+    action?: string;
+    data?: { id?: string | number; external_reference?: string; status?: string };
+  };
   const tipo = String(body.type ?? query.type ?? '');
   const dataId = String(query['data.id'] ?? body.data?.id ?? '');
 
@@ -50,6 +57,36 @@ router.post('/mercadopago', async (req, res) => {
     res.sendStatus(200);
     return;
   }
+
+  // Kuruk Pay (maquininha Point): o pedido pertence a UMA empresa, então a assinatura
+  // usada é a do aplicativo Kuruk Pay e o estado é relido com o token daquela empresa.
+  if (tipo === 'order' || String(body.action ?? '').startsWith('order.')) {
+    const payApp = await loadPayAppSettings();
+    const assinaturaPay = verifyWebhookSignature({
+      xSignature: req.header('x-signature'),
+      xRequestId: req.header('x-request-id'),
+      dataId,
+      secret: payApp.webhookSecret,
+    });
+    if (assinaturaPay === false) {
+      log('assinatura inválida no pedido Kuruk Pay — notificação recusada', { dataId });
+      res.sendStatus(401);
+      return;
+    }
+    try {
+      const known = await handlePayOrderNotification(
+        dataId,
+        body.data?.external_reference ? String(body.data.external_reference) : null,
+      );
+      log(known ? 'pedido Kuruk Pay sincronizado' : 'pedido de outra origem — ignorado', { dataId });
+      res.sendStatus(200);
+    } catch (e) {
+      log('falha ao sincronizar pedido Kuruk Pay', { dataId, erro: (e as Error).message });
+      res.sendStatus(500);
+    }
+    return;
+  }
+
   const tiposAceitos = new Set(['payment', 'subscription_preapproval', 'subscription_authorized_payment']);
   if (tipo && !tiposAceitos.has(tipo)) {
     log(`evento "${tipo}" não é tratado pelo Kuruk — ignorado`, { dataId });

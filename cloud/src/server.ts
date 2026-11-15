@@ -31,6 +31,11 @@ import affiliateRoutes from './routes/affiliate';
 import webhookRoutes from './routes/webhooks';
 import publicPayRoutes from './routes/payPublic';
 import paymentRoutes from './routes/payments';
+import payRoutes from './routes/pay';
+import payMobileRoutes from './routes/payMobile';
+import payAdminRoutes from './routes/payAdmin';
+import payPublicRoutes from './routes/payPublic';
+import payOAuthPublicRoutes from './routes/payOAuthPublic';
 import planRoutes, { publicPlanSealsRouter } from './routes/plans';
 import usageRoutes from './routes/usage';
 import contractRoutes from './routes/contracts';
@@ -121,6 +126,8 @@ export function createCloudServer() {
   app.use('/pagar', publicPayRoutes);
   // Página pública da assinatura recorrente (link enviado ao cliente para autorizar o cartão).
   app.use('/', publicSubscriptionsRouter);
+  // Retorno público do OAuth do Kuruk Pay (a configuração em si fica em /m/pay e /admin/pay).
+  app.use('/pay', payOAuthPublicRoutes);
   // Selos personalizados dos planos (imagem pública, consumida pelo app e pela assinatura).
   app.use('/', publicPlanSealsRouter);
   // Tela única de login (admin x afiliado): o controller decide o destino pelo usuário/senha.
@@ -149,6 +156,11 @@ export function createCloudServer() {
   app.use('/api/mobile', mobileGrantsRoutes);
   app.use('/api/mobile', mobileCommandsRoutes);
   app.use('/api/commands', desktopCommandsRoutes);
+  // Kuruk Pay: maquininha Point da conta Mercado Pago do lojista (produto separado da
+  // assinatura). A API usa a licença; o callback do OAuth é público e casa pelo `state`.
+  app.use('/api/pay', payRoutes);
+  // A configuração no celular fica ANTES do router do painel `/m` (que captura `/`).
+  app.use('/m/pay', payMobileRoutes);
   app.use('/m', mobileAppRoutes);
   // Página do orçamento que o CLIENTE da loja abre pelo link do WhatsApp. Fora de `/m`
   // porque é pública — `/m` inteiro exige o cookie de acesso do lojista.
@@ -168,6 +180,8 @@ export function createCloudServer() {
   // Portal do afiliado (representante): login próprio e visão restrita às indicações dele.
   app.use('/afiliado', affiliateRoutes);
   app.use('/admin/messages', adminMessagesRoutes);
+  // Kuruk Pay: credenciais do aplicativo e contas conectadas pelas empresas.
+  app.use('/admin', payAdminRoutes);
   app.use('/admin', adminRoutes);
   // Preços e promoções dos planos (catálogo consumido pelo app e pela landing).
   app.use('/admin', planRoutes);

@@ -431,7 +431,8 @@ export async function createServer(): Promise<KurukServer> {
     assertAuth(req);
     const canManageMd = req.user.permissions.has('maisdelivery.settings.manage');
     const canOrders = req.user.permissions.has('maisdelivery.orders.view');
-    if (!canManageMd && !canOrders && !req.user.permissions.has('settings.view')) {
+    const canCheckPay = req.user.permissions.has('kurukpay.settings.view');
+    if (!canManageMd && !canOrders && !canCheckPay && !req.user.permissions.has('settings.view')) {
       res.redirect('/');
       return;
     }
@@ -440,6 +441,7 @@ export async function createServer(): Promise<KurukServer> {
       canManageMd,
       canCheckMd: canManageMd,
       canOrders,
+      canCheckPay,
     });
   });
   app.get('/admin/recursos', requireAuth, page('recursos', 'settings.capabilities.edit'));

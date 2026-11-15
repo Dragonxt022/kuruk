@@ -107,6 +107,15 @@ export const salePaymentSchema = z
     installments: z
       .object({ count: z.number().int().positive(), firstDueDate: z.string().optional() })
       .optional(),
+    // Kuruk Pay (maquininha Point): metadados devolvidos pelo terminal. O servidor
+    // valida o UUID e só grava em pagamentos de cartão (ver sales.ts).
+    pointOrderUuid: z
+      .string()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Pedido Point inválido.')
+      .optional(),
+    pointBrand: z.string().max(32).optional(),
+    pointInstallments: z.number().int().positive().optional(),
+    pointPaymentType: z.string().max(32).optional(),
   })
   .transform((data) => ({
     ...data,

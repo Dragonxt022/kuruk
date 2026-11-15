@@ -140,6 +140,15 @@ export const ADMIN_BLOCKS: AdminBlock[] = [
     keywords: 'mercadopago pagarme checkout cartão pix',
   },
   {
+    key: 'pay',
+    label: 'Kuruk Pay',
+    description: 'Maquininhas Point das empresas e credenciais do aplicativo.',
+    href: '/admin/pay',
+    category: 'Comercial',
+    icon: 'gateways',
+    keywords: 'maquininha point terminal mercado pago presencial cartão',
+  },
+  {
     key: 'affiliates',
     label: 'Afiliados',
     description: 'Parceiros, indicações e cadastro de afiliados.',
@@ -323,6 +332,7 @@ export function blockForPath(originalUrl: string): string | null {
     plans: 'plans',
     gateways: 'gateways',
     payments: 'gateways',
+    pay: 'pay',
     affiliates: 'affiliates',
     commissions: 'commissions',
     payouts: 'payouts',

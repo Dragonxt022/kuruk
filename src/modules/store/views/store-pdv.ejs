@@ -23,6 +23,19 @@
       border: 1px solid var(--border-light); border-radius: var(--radius); box-shadow: var(--shadow-xs); max-height: 240px; overflow: auto; }
     .pdv-customer-list button { display: flex; justify-content: space-between; width: 100%; padding: .4rem .6rem; background: none; border: 0; cursor: pointer; text-align: left; }
     .pdv-customer-list button:hover { background: var(--border-light); }
+    .pdv-point-option {
+      display: flex; align-items: center; gap: 9px; margin-top: 10px; padding: 10px 12px;
+      border: 1.5px dashed var(--border-light); border-radius: var(--radius); background: var(--surface-hover);
+      font-size: .84rem; cursor: pointer;
+    }
+    .pdv-point-option input { width: auto; }
+    .pdv-point-option.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--surface)); }
+    .pdv-point-spinner {
+      width: 34px; height: 34px; border-radius: 50%; margin: 0 auto;
+      border: 4px solid color-mix(in srgb, var(--primary) 20%, transparent);
+      border-top-color: var(--primary); animation: pdvPointSpin .85s linear infinite;
+    }
+    @keyframes pdvPointSpin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -867,6 +880,30 @@
         <p class="pay-field-hint" x-show="selectedFee() > 0" x-text="selectedFeeLabel()"></p>
       </div>
 
+      <%# Kuruk Pay: só em débito/crédito e só quando a conta Point está pronta. O valor
+          é enviado ao terminal ANTES de lançar o pagamento; se o cartão for recusado,
+          nada entra na venda. %>
+      <div class="pay-method-panel" x-show="showsPointOption()" x-cloak>
+        <label class="pdv-point-option" :class="{ active: point.use }">
+          <input type="checkbox" x-model="point.use" />
+          <span>
+            <strong>Cobrar na maquininha Point</strong>
+            <span class="muted" style="display:block;font-size:.76rem">
+              Envia <strong x-text="brl(cents(pay.amount))"></strong> ao terminal e espera a aprovação.
+            </span>
+          </span>
+        </label>
+        <div x-show="point.use" x-cloak style="margin-top:8px">
+          <label class="pay-field-label" for="pay-point-terminal">Terminal</label>
+          <select id="pay-point-terminal" x-model="point.terminalId" style="width:100%">
+            <template x-for="t in point.terminals" :key="'pt' + t.terminalId">
+              <option :value="t.terminalId" x-text="t.label + (t.posId ? ' · PDV ' + t.posId : '')"></option>
+            </template>
+          </select>
+          <p class="pay-field-hint" x-show="point.terminals.length > 1">O operador recebe a confirmação no próprio terminal.</p>
+        </div>
+      </div>
+
       <div class="pay-method-panel" x-show="selectedType() === 'prazo'" x-cloak>
         <template x-if="prazoPayment()">
           <div class="pay-registered-note">
@@ -974,6 +1011,23 @@
         <div class="error" x-text="payError"<% if (user.permissions.has('finance.cash.open')) { %> x-show="!payError.includes('Abra o caixa')"<% } %>></div>
 
   </dialog>
+
+    <!-- ─── MODAL: cobrança na maquininha Point (Kuruk Pay) ─── -->
+    <dialog x-ref="pointDlg" class="dialog-fixed" @cancel.prevent="point.charging ? $event.preventDefault() : $refs.pointDlg.close()">
+      <h1>Maquininha Point</h1>
+      <div class="dialog-body" style="text-align:center">
+        <div class="pdv-point-spinner" x-show="point.charging" x-cloak></div>
+        <p style="font-size:1rem;font-weight:700;margin:14px 0 4px" x-text="point.label || 'Enviando para a maquininha…'"></p>
+        <p class="muted" style="margin:0 0 10px" x-show="point.charging" x-cloak>
+          Passe, insira ou aproxime o cartão no terminal. Não feche esta janela.
+        </p>
+        <p class="error" x-show="point.error" x-cloak x-text="point.error"></p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn secondary" x-show="point.charging" @click="cancelPointCharge()">Cancelar cobrança</button>
+        <button type="button" class="btn" x-show="!point.charging" @click="$refs.pointDlg.close()">Fechar</button>
+      </div>
+    </dialog>
 
     <!-- ─── MODAL: Venda a prazo (parcelamento) ─── -->
     <dialog x-ref="prazoDlg" class="dialog-fixed">
@@ -1242,6 +1296,12 @@
         set payments(v) { this.slots[this.activeSlot].payments = v; },
         valueDlg: { kind: 'desconto', amount: '', mode: 'valor', reason: '', pin: '', needPin: false, error: '' },
         pay: { methodId: null, amount: '', split: 2, received: '', editingBackup: null },
+        // Kuruk Pay (maquininha Point). `enabled` só vira true quando a nuvem responde que
+        // a conta está conectada e existe terminal; sem isso a opção nem aparece no PDV.
+        point: {
+          enabled: false, terminals: [], terminalId: '', use: false,
+          charging: false, orderUuid: '', status: '', label: '', error: '', pollTimer: null,
+        },
         showSplit: false,
         error: '', payError: '', saving: false, sendingKitchen: false, appSettings: [],
         // Vem do servidor (pages.ts): operador de caixa não lê /api/settings.
@@ -1513,6 +1573,7 @@
           this.focusSearch();
           this.$watch('slots', () => this.persistSlots());
           this.loadFavorites();
+          this.loadPointConfig();
           this.checkOnline();
           setInterval(() => this.checkOnline(), 25000);
           document.addEventListener('keydown', (e) => {
@@ -2614,7 +2675,162 @@
           this.payError = '';
           this.persistSlots();
         },
-        addPayment() {
+        // ─── Kuruk Pay (maquininha Point) ───
+        async loadPointConfig() {
+          try {
+            const r = await fetch('/api/kuruk-pay/point-config', { headers: { Accept: 'application/json' } });
+            if (!r.ok) return;
+            const d = await r.json();
+            this.point.enabled = !!d.enabled;
+            this.point.terminals = Array.isArray(d.terminals) ? d.terminals : [];
+            this.point.terminalId = d.defaultTerminalId
+              || (this.point.terminals[0] && this.point.terminals[0].terminalId)
+              || '';
+          } catch (e) {
+            // Sem nuvem/rede: a opção Point simplesmente não aparece; o PDV segue normal.
+          }
+        },
+        showsPointOption() {
+          return this.point.enabled && this.point.terminals.length > 0
+            && ['debito', 'credito'].includes(this.selectedType());
+        },
+        methodIdForPointType(type) {
+          const alvo = type === 'credit_card' ? 'credito' : (type === 'debit_card' ? 'debito' : null);
+          if (!alvo) return null;
+          const m = this.methods.find((x) => x.type === alvo);
+          return m ? m.id : null;
+        },
+        pointStatusLabel(o) {
+          if (!o) return '';
+          if (o.paid) return 'Pagamento aprovado!';
+          if (o.status === 'creating') return 'Enviando para a maquininha…';
+          if (o.status === 'at_terminal' || o.status === 'created' || o.status === 'pending') return 'Aguardando a maquininha…';
+          if (o.status === 'canceled' || o.status === 'cancelled') return 'Cobrança cancelada';
+          if (o.status === 'expired') return 'A cobrança expirou';
+          if (o.status === 'failed' || o.status === 'rejected') return 'Cobrança não aprovada';
+          return o.status;
+        },
+        async chargePoint(method, amount) {
+          if (this.point.charging) return;
+          if (!this.point.terminalId) {
+            this.payError = 'Escolha o terminal Point antes de cobrar.';
+            return;
+          }
+          this.point.charging = true;
+          this.point.error = '';
+          this.point.status = 'creating';
+          this.point.label = 'Enviando para a maquininha…';
+          this.point.orderUuid = '';
+          this.payError = '';
+          this.$nextTick(() => { try { this.$refs.pointDlg.showModal(); } catch (e) { /* já aberto */ } });
+          const descricao = 'Venda PDV' + (this.customerName ? ' — ' + this.customerName.trim().slice(0, 80) : '');
+          try {
+            const r = await fetch('/api/kuruk-pay/orders', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({
+                amountCents: amount,
+                description: descricao,
+                terminalId: this.point.terminalId,
+                origin: 'pdv',
+                saleUuid: this.slots[this.activeSlot].clientRequestId || undefined,
+              }),
+            });
+            const d = await r.json();
+            if (!r.ok) {
+              this.point.charging = false;
+              this.point.error = d.error || 'Não foi possível enviar para a maquininha.';
+              this.point.label = 'Falha ao enviar';
+              this.payError = this.point.error;
+              return;
+            }
+            this.point.orderUuid = d.order.uuid;
+            this.point.status = d.order.status;
+            this.point.label = this.pointStatusLabel(d.order);
+            this.startPointPolling(d.order.uuid, method, amount);
+          } catch (e) {
+            this.point.charging = false;
+            this.point.error = 'Sem conexão com a nuvem. A venda não foi cobrada.';
+            this.point.label = 'Falha ao enviar';
+            this.payError = this.point.error;
+          }
+        },
+        startPointPolling(uuid, method, amount) {
+          this.stopPointPolling();
+          const began = Date.now();
+          const tick = async () => {
+            if (!this.point.charging) return;
+            if (Date.now() - began > 180000) {
+              this.point.charging = false;
+              this.point.label = 'Tempo esgotado';
+              this.point.error = 'O terminal não respondeu em 3 minutos. Confira a maquininha e cancele a cobrança.';
+              this.payError = this.point.error;
+              return;
+            }
+            try {
+              const r = await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(uuid), { headers: { Accept: 'application/json' } });
+              const d = await r.json();
+              if (r.ok && d.order) {
+                const o = d.order;
+                this.point.status = o.status;
+                this.point.label = this.pointStatusLabel(o);
+                if (o.paid) {
+                  this.point.charging = false;
+                  this.stopPointPolling();
+                  try { this.$refs.pointDlg.close(); } catch (e) { /* já fechado */ }
+                  // O terminal decide débito x crédito; se ele divergir do botão escolhido,
+                  // registra na forma correta para o relatório de vendas não mentir.
+                  const methodId = this.methodIdForPointType(o.paymentType) || method.id;
+                  this.payments.push({
+                    methodId,
+                    amountCents: amount,
+                    pointOrderUuid: o.uuid,
+                    pointBrand: o.cardBrand || o.paymentMethodId || undefined,
+                    pointInstallments: o.installments || undefined,
+                    pointPaymentType: o.paymentType || undefined,
+                  });
+                  this.afterPaymentAdded();
+                  return;
+                }
+                if (['failed', 'canceled', 'cancelled', 'expired', 'rejected'].includes(o.status)) {
+                  this.point.charging = false;
+                  this.stopPointPolling();
+                  this.point.label = 'Cobrança não concluída';
+                  this.point.error = o.error || 'A maquininha não concluiu a cobrança. A venda não foi lançada.';
+                  this.payError = this.point.error;
+                  return;
+                }
+              }
+            } catch (e) {
+              // rede oscilou: tenta de novo no próximo ciclo
+            }
+            this.point.pollTimer = setTimeout(tick, 2000);
+          };
+          tick();
+        },
+        stopPointPolling() {
+          if (this.point.pollTimer) clearTimeout(this.point.pollTimer);
+          this.point.pollTimer = null;
+        },
+        async cancelPointCharge() {
+          const uuid = this.point.orderUuid;
+          this.stopPointPolling();
+          this.point.charging = false;
+          if (uuid) {
+            try {
+              await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(uuid) + '/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: '{}',
+              });
+            } catch (e) { /* melhor esforço */ }
+          }
+          this.point.label = 'Cobrança cancelada';
+          this.point.error = '';
+          this.payError = '';
+          try { this.$refs.pointDlg.close(); } catch (e) { /* já fechado */ }
+        },
+        async addPayment() {
           const method = this.selectedMethod();
           const type = this.selectedType();
           if (!method) { this.payError = 'Escolha a forma de pagamento.'; return; }
@@ -2639,6 +2855,12 @@
             this.payError = 'Saldo de crédito de loja insuficiente.'; return;
           }
           this.payError = '';
+          // Kuruk Pay: a cobrança acontece ANTES de lançar o pagamento. Se o cartão for
+          // recusado, a venda continua aberta e nada é registrado.
+          if (this.showsPointOption() && this.point.use) {
+            await this.chargePoint(method, amount);
+            return;
+          }
           const extra = (type === 'credito_loja' || type === 'convenio') ? { customerId: this.customerId || undefined } : {};
           const payment = { methodId: method.id, amountCents: amount, ...extra };
           if (type === 'dinheiro') payment.receivedCents = Math.max(amount, raw);
@@ -2892,6 +3114,12 @@
             if (p.dueDate) out.dueDate = p.dueDate;
             if (p.installments) out.installments = p.installments;
             if (p.pointsUsed) out.pointsUsed = p.pointsUsed;
+            if (p.pointOrderUuid) {
+              out.pointOrderUuid = p.pointOrderUuid;
+              out.pointBrand = p.pointBrand;
+              out.pointInstallments = p.pointInstallments;
+              out.pointPaymentType = p.pointPaymentType;
+            }
             return out;
           });
           const comandaId = this.slots[this.activeSlot].comandaId;

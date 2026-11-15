@@ -23,6 +23,7 @@ import { loyaltyPointMovementRepository } from '../commercial/repositories/Stock
 import { scheduleSyncSoon } from '../../core/sync/scheduler';
 import { createLogger } from '../../core/logger';
 import { settingsRepository } from '../../core/repositories/SettingsRepository';
+import { refundPointOrderInBackground } from '../kuruk-pay/cloud';
 
 const log = createLogger('kitchen');
 
@@ -44,6 +45,11 @@ export interface SalePaymentInput {
   dueDate?: string;
   installments?: { count: number; firstDueDate: string };
   pointsUsed?: number;
+  /** Kuruk Pay: pedido na maquininha Point que autorizou esta parcela. */
+  pointOrderUuid?: string;
+  pointBrand?: string;
+  pointInstallments?: number;
+  pointPaymentType?: string;
 }
 
 export interface SaleInput {
@@ -98,6 +104,27 @@ interface ResolvedPayment {
   dueDate?: string;
   installments?: { count: number; firstDueDate: string };
   pointsUsed?: number;
+  pointOrderUuid?: string;
+  pointBrand?: string;
+  pointInstallments?: number;
+  pointPaymentType?: string;
+}
+
+/** UUID do pedido Point; qualquer outra coisa é descartada (não vai para o SQL). */
+function validPointUuid(value: unknown): string | undefined {
+  const s = String(value ?? '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s) ? s : undefined;
+}
+
+function pointMeta(pay: SalePaymentInput): Partial<ResolvedPayment> {
+  // Só faz sentido em cartão; ignora o campo se um cliente antigo mandar em outra forma.
+  return {
+    pointOrderUuid: validPointUuid(pay.pointOrderUuid),
+    pointBrand: pay.pointBrand ? String(pay.pointBrand).slice(0, 32) : undefined,
+    pointInstallments: Number.isFinite(Number(pay.pointInstallments)) && Number(pay.pointInstallments) > 0
+      ? Math.round(Number(pay.pointInstallments)) : undefined,
+    pointPaymentType: pay.pointPaymentType ? String(pay.pointPaymentType).slice(0, 32) : undefined,
+  };
 }
 
 function resolveSaleItems(
@@ -272,6 +299,7 @@ function resolveSalePayments(
         method, amountCents: amount, receivedCents: received, changeCents: change,
         feeCents: Math.round((amount * method.fee_bps) / 10000),
         customerId: pay.customerId, dueDate: pay.dueDate, installments: pay.installments, pointsUsed: pay.pointsUsed,
+        ...(['debito', 'credito'].includes(method.type) ? pointMeta(pay) : {}),
       });
     }
   } else if (input.paymentMethod) {
@@ -490,10 +518,13 @@ export function createSale(
 
         saleRepository.rawRun(
           `INSERT INTO sale_payments (sale_id, payment_method_id, method_name, method_type, amount_cents,
-             fee_bps, fee_cents, received_cents, change_cents, receivable_id, points_used)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             fee_bps, fee_cents, received_cents, change_cents, receivable_id, points_used,
+             point_order_uuid, point_brand, point_installments, point_payment_type)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           saleId, pay.method.id, pay.method.name, pay.method.type, pay.amountCents,
           pay.method.fee_bps, pay.feeCents, pay.receivedCents, pay.changeCents, payReceivableId, pointsUsed,
+          pay.pointOrderUuid ?? null, pay.pointBrand ?? null, pay.pointInstallments ?? null,
+          pay.pointPaymentType ?? null,
         );
       }
       if (receivableId) saleRepository.updateReceivable(saleId, receivableId);
@@ -705,6 +736,12 @@ export function cancelSale(req: Request, saleId: number): { ok: true } | { ok: f
 
   if (error) return { ok: false, error };
   audit(req, 'venda_cancelar', 'sale', saleId, sale, { status: 'cancelada' });
+  // Kuruk Pay: a venda foi cancelada, então a cobrança na maquininha também precisa
+  // voltar. Best-effort e fora da transação — se o Mercado Pago estiver fora, o
+  // histórico do Kuruk Pay ainda permite estornar manualmente.
+  for (const p of payments as { point_order_uuid?: string | null }[]) {
+    if (p.point_order_uuid) refundPointOrderInBackground(p.point_order_uuid);
+  }
   // Best-effort: a venda já foi cancelada — falha na cozinha não pode desfazer isso.
   // Sem isso o KDS ficava com ticket pendente eterno de pedido que não existe mais.
   try {

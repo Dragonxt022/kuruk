@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <%- include('partials/theme-init') %>
+  <title>Kuruk Pay — conexão Mercado Pago</title>
+  <link rel="icon" type="image/png" href="/logo_kuruk-icon.png">
+  <%- include('partials/styles') %>
+  <link rel="stylesheet" href="/css/login.css">
+  <style>
+    .pay-done { text-align: center; max-width: 520px; }
+    .pay-done .mark { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 16px; }
+    .pay-done .mark.ok { background: #eaf7ee; color: #17663a; }
+    .pay-done .mark.warn { background: #fff4e5; color: #b45309; }
+    .pay-done h1 { margin: 0 0 8px; font-size: 1.25rem; }
+    .pay-done p { margin: 0 0 8px; color: var(--muted); line-height: 1.6; }
+    .pay-done .steps { text-align: left; margin: 18px 0; padding: 14px 16px; border-radius: 12px; background: var(--surface-hover); color: var(--muted); font-size: .82rem; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="card login-card pay-done">
+    <div class="mark <%= ok ? 'ok' : 'warn' %>">
+      <% if (ok) { %>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <% } else { %>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+      <% } %>
+    </div>
+    <div class="brand"><img id="brand-logo" src="/logo_kuruk-icon.png" alt=""> Kuruk Pay</div>
+    <h1><%= ok ? (cancelado ? 'Conexão cancelada' : 'Mercado Pago conectado!') : 'Não foi possível conectar' %></h1>
+    <p>
+      <% if (ok && !cancelado) { %>
+        A conta Mercado Pago foi autorizada. Os terminais Point já podem ser sincronizados.
+      <% } else if (cancelado) { %>
+        Você cancelou a autorização no Mercado Pago. Nenhuma conta foi conectada.
+      <% } else { %>
+        O Mercado Pago recusou ou o pedido expirou. Comece de novo pelo Kuruk.
+      <% } %>
+    </p>
+    <% if (ok && !cancelado) { %>
+      <div class="steps">
+        <strong>Próximo passo</strong><br>
+        Volte para o Kuruk e clique em <strong>Sincronizar terminais</strong>. Depois escolha o terminal padrão
+        e faça uma cobrança de teste na maquininha.
+      </div>
+    <% } %>
+    <% if (origem === 'desktop') { %>
+      <p class="login-help">Você pode fechar esta aba e voltar para o Kuruk.</p>
+    <% } else { %>
+      <p class="login-help"><a href="/m/pay">Voltar para o Kuruk Web</a></p>
+    <% } %>
+  </div>
+  <script>
+    if (document.documentElement.getAttribute('data-theme') === 'dark') {
+      document.getElementById('brand-logo').src = '/logo_kuruk-icon_branco.png';
+    }
+  </script>
+</body>
+</html>

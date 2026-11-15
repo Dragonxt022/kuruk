@@ -51,7 +51,7 @@ router.get('/vendas/:id/cupom', (req, res) => {
   );
   if (!sale) return res.status(404).send('Venda não encontrada.');
   const items = saleRepository.raw('SELECT product_name, qty, unit_price_cents, total_cents FROM sale_items WHERE sale_id = ?', req.params.id);
-  const payments = salePaymentRepository.raw('SELECT method_name, amount_cents, received_cents, change_cents FROM sale_payments WHERE sale_id = ?', req.params.id);
+  const payments = salePaymentRepository.raw('SELECT method_name, amount_cents, received_cents, change_cents, point_brand, point_installments, point_payment_type FROM sale_payments WHERE sale_id = ?', req.params.id);
   res.render('store-receipt', { sale, items, payments, company: companyInfo() });
 });
 

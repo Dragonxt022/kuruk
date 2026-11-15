@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <%- include('partials/theme-init') %>
+  <title>Kuruk — Kuruk Pay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="icon" type="image/png" href="/logo_kuruk-icon.png" />
+  <link rel="stylesheet" href="/css/app.css" />
+  <script nonce="<%= cspNonce %>" defer src="/vendor/alpine.min.js"></script>
+  <style>
+    .pay-page { max-width: 1080px; }
+    .pay-hero { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
+    .pay-hero-icon {
+      width: 58px; height: 58px; flex: none; border-radius: 16px; display: grid; place-items: center;
+      background: linear-gradient(135deg, #009ee3, #0072bc); color: #fff; box-shadow: var(--shadow-sm);
+    }
+    .pay-hero h1 { margin: 0; font-size: 1.4rem; }
+    .pay-hero p { margin: 4px 0 0; color: var(--text-muted); font-size: .86rem; line-height: 1.5; max-width: 720px; }
+    .pay-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 16px; align-items: start; }
+    @media (max-width: 900px) { .pay-grid { grid-template-columns: 1fr; } }
+    .pay-card {
+      background: var(--surface); border: 1px solid var(--border-light); border-radius: 16px;
+      padding: 18px 20px; box-shadow: var(--shadow-sm);
+    }
+    .pay-card h2 { margin: 0 0 4px; font-size: 1rem; }
+    .pay-card .hint { margin: 0 0 14px; color: var(--text-muted); font-size: .8rem; line-height: 1.5; }
+    .pay-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+    .pay-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; }
+    .pay-chip.on { background: #e8f7ee; color: #17663a; }
+    .pay-chip.off { background: var(--surface-hover); color: var(--text-muted); }
+    .pay-chip.warn { background: #fff4e5; color: #a35a00; }
+    .pay-chip.err { background: #fdecec; color: #b42318; }
+    .pay-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pay-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+    .pay-field label { font-size: .75rem; font-weight: 700; color: var(--text-muted); }
+    .pay-field input, .pay-field select { width: 100%; }
+    .pay-term {
+      display: flex; align-items: center; gap: 12px; padding: 12px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .pay-term:last-child { border-bottom: 0; }
+    .pay-term-main { flex: 1; min-width: 0; }
+    .pay-term-main strong { display: block; font-size: .88rem; }
+    .pay-term-main span { display: block; color: var(--text-muted); font-size: .72rem; margin-top: 2px; }
+    .pay-empty { padding: 18px 0; text-align: center; color: var(--text-muted); font-size: .82rem; }
+    .pay-alert { padding: 11px 14px; border-radius: 12px; font-size: .82rem; line-height: 1.5; margin-bottom: 14px; }
+    .pay-alert.ok { background: #eaf7ee; color: #17663a; }
+    .pay-alert.err { background: #fdecec; color: #b42318; }
+    .pay-alert.warn { background: #fff4e5; color: #8a5a00; }
+    .pay-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .pay-table th { text-align: left; font-size: .67rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); padding: 8px 10px; border-bottom: 1px solid var(--border-light); }
+    .pay-table td { padding: 10px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+    .pay-table tr:last-child td { border-bottom: 0; }
+    .pay-sub { display: block; color: var(--text-muted); font-size: .7rem; margin-top: 2px; }
+    .pay-watch { border: 2px solid var(--primary); }
+    .pay-spinner { width: 18px; height: 18px; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--primary) 22%, transparent); border-top-color: var(--primary); animation: payspin .8s linear infinite; flex: none; }
+    @keyframes payspin { to { transform: rotate(360deg); } }
+    .pay-steps { margin: 0; padding-left: 18px; color: var(--text-muted); font-size: .8rem; line-height: 1.75; }
+    .pay-inline { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .pay-inline > .pay-field { flex: 1 1 150px; margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <%- include('partials/nav', { user, page: '/app/kuruk-pay' }) %>
+  <main class="pay-page" x-data="kurukPayPage(<%= canManage %>, <%= canCharge %>, <%= canRefund %>)" x-init="init()">
+    <header class="pay-hero">
+      <span class="pay-hero-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+      </span>
+      <div>
+        <h1>Kuruk Pay</h1>
+        <p>
+          Receba na maquininha <strong>Mercado Pago Point</strong> usando a conta da sua loja.
+          O dinheiro cai direto nela; o Kuruk só envia a cobrança para o terminal.
+        </p>
+        <div class="pay-chips" x-show="state" x-cloak>
+          <span class="pay-chip" :class="chipClass()" x-text="chipLabel()"></span>
+          <span class="pay-chip off" x-show="state && state.connected" x-text="(state && state.environment === 'teste') ? 'Ambiente de teste' : 'Produção'"></span>
+          <span class="pay-chip off" x-show="state && state.connected && state.account && !state.account.liveMode" x-cloak>token de teste</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="pay-alert err" x-show="error" x-cloak x-text="error"></div>
+    <div class="pay-alert ok" x-show="notice" x-cloak x-text="notice"></div>
+
+    <template x-if="loading && !state">
+      <div class="pay-card"><div class="pay-empty">Consultando a nuvem…</div></div>
+    </template>
+
+    <template x-if="state && !state.configured">
+      <div class="pay-alert warn">
+        O Kuruk Pay ainda não foi liberado nesta instalação. Peça ao suporte para cadastrar o
+        aplicativo Mercado Pago no painel do Kuruk.
+      </div>
+    </template>
+
+    <template x-if="state && state.configured && !state.connected">
+      <div class="pay-grid">
+        <section class="pay-card">
+          <h2>Conectar Mercado Pago</h2>
+          <p class="hint">
+            Você será levado ao site do Mercado Pago para entrar na conta da loja e autorizar o
+            Kuruk Pay. Escolha a conta onde a maquininha Point está cadastrada.
+          </p>
+          <div class="pay-field">
+            <label for="pay-env">Ambiente</label>
+            <select id="pay-env" x-model="environment">
+              <option value="producao">Produção (conta real)</option>
+              <option value="teste">Teste (usuário de teste)</option>
+            </select>
+          </div>
+          <div class="pay-actions">
+            <button class="btn" type="button" :disabled="!canManage || connecting" @click="connect()">
+              <span x-text="connecting ? 'Aguardando autorização…' : 'Conectar Mercado Pago'"></span>
+            </button>
+            <button class="btn secondary" type="button" x-show="connecting" @click="stopPolling(); connecting = false">Já autorizei</button>
+          </div>
+          <p class="hint" style="margin-top:12px" x-show="connecting">
+            A janela do Mercado Pago foi aberta. Depois de autorizar, esta tela atualiza sozinha.
+          </p>
+          <p class="hint" style="margin-top:12px" x-show="!canManage">
+            Seu usuário pode ver a conexão, mas não alterá-la.
+          </p>
+        </section>
+
+        <section class="pay-card">
+          <h2>Como funciona</h2>
+          <ol class="pay-steps">
+            <li>Você autoriza a conta Mercado Pago da loja.</li>
+            <li>O Kuruk lista os terminais Point vinculados a ela.</li>
+            <li>Você escolhe o terminal padrão.</li>
+            <li>No PDV, a venda em débito/crédito vai para a maquininha.</li>
+          </ol>
+        </section>
+      </div>
+    </template>
+
+    <template x-if="state && state.connected">
+      <div class="pay-grid">
+        <section class="pay-card">
+          <h2>Conta conectada</h2>
+          <p class="hint" x-text="accountLine()"></p>
+          <div class="pay-alert err" x-show="state.account && state.account.status !== 'conectado' && state.account.lastError" x-cloak x-text="state.account && state.account.lastError"></div>
+          <div class="pay-actions">
+            <button class="btn secondary" type="button" :disabled="!canManage || syncing" @click="sync()">
+              <span x-text="syncing ? 'Sincronizando…' : 'Sincronizar terminais'"></span>
+            </button>
+            <button class="btn secondary" type="button" :disabled="!canManage || disconnecting" @click="disconnect()">
+              <span x-text="disconnecting ? 'Desconectando…' : 'Desconectar conta'"></span>
+            </button>
+          </div>
+        </section>
+
+        <section class="pay-card">
+          <h2>Terminais Point</h2>
+          <p class="hint" x-text="terminalsHint()"></p>
+          <template x-if="!state.terminals.length">
+            <div class="pay-empty">
+              Nenhum terminal encontrado. Confira se a maquininha está vinculada à conta e sincronize.
+            </div>
+          </template>
+          <template x-for="t in state.terminals" :key="t.terminalId">
+            <div class="pay-term">
+              <div class="pay-term-main">
+                <strong x-text="t.label"></strong>
+                <span>
+                  <span x-text="t.terminalId"></span>
+                  <template x-if="t.posId"><span x-text="' · PDV ' + t.posId"></span></template>
+                  <template x-if="t.operatingMode"><span x-text="' · ' + t.operatingMode"></span></template>
+                </span>
+              </div>
+              <span class="pay-chip on" x-show="t.isDefault">padrão</span>
+              <button class="btn secondary" type="button" x-show="!t.isDefault" :disabled="!canManage || defaultBusy" @click="setDefault(t)">Usar este</button>
+            </div>
+          </template>
+        </section>
+      </div>
+    </template>
+
+    <template x-if="state && state.connected && state.terminals.length && canCharge">
+      <section class="pay-card" style="margin-top:16px">
+        <h2>Cobrança de teste</h2>
+        <p class="hint">Envie um valor para a maquininha e confirme o recebimento antes de usar no PDV.</p>
+        <div class="pay-inline">
+          <div class="pay-field">
+            <label for="pay-amount">Valor</label>
+            <input id="pay-amount" x-model="test.amount" inputmode="decimal" placeholder="0,00" autocomplete="off" />
+          </div>
+          <div class="pay-field">
+            <label for="pay-desc">Descrição</label>
+            <input id="pay-desc" x-model="test.description" maxlength="120" placeholder="Cobrança de teste" />
+          </div>
+          <div class="pay-field">
+            <label for="pay-terminal">Terminal</label>
+            <select id="pay-terminal" x-model="test.terminalId">
+              <template x-for="t in state.terminals" :key="'test-' + t.terminalId">
+                <option :value="t.terminalId" x-text="t.label"></option>
+              </template>
+            </select>
+          </div>
+          <button class="btn" type="button" :disabled="testBusy" @click="testCharge()">
+            <span x-text="testBusy ? 'Enviando…' : 'Enviar para a maquininha'"></span>
+          </button>
+        </div>
+        <p class="pay-alert err" x-show="testError" x-cloak x-text="testError"></p>
+      </section>
+    </template>
+
+    <template x-if="testOrder">
+      <section class="pay-card pay-watch" style="margin-top:16px">
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <span class="pay-spinner" x-show="!testOrder.paid && !testFinal" x-cloak></span>
+          <div style="flex:1">
+            <h2 x-text="testStatusLabel()"></h2>
+            <p class="hint" x-text="testStatusHint()"></p>
+            <div class="pay-actions" x-show="!testOrder.paid && !testFinal" x-cloak>
+              <button class="btn secondary" type="button" @click="cancelTest()">Cancelar cobrança</button>
+            </div>
+            <div class="pay-actions" x-show="testOrder.paid" x-cloak>
+              <button class="btn secondary" type="button" @click="testOrder = null; testBusy = false">Fechar</button>
+            </div>
+          </div>
+          <strong x-text="brl(testOrder.amountCents)"></strong>
+        </div>
+      </section>
+    </template>
+
+    <section class="pay-card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <div>
+          <h2>Cobranças recentes</h2>
+          <p class="hint" style="margin-bottom:0">Histórico desta loja no Kuruk Pay (não é a assinatura do Kuruk).</p>
+        </div>
+        <button class="btn secondary" type="button" @click="loadOrders()">Atualizar</button>
+      </div>
+      <template x-if="!orders.length">
+        <div class="pay-empty">Nenhuma cobrança registrada ainda.</div>
+      </template>
+      <div style="overflow-x:auto" x-show="orders.length" x-cloak>
+        <table class="pay-table">
+          <thead>
+            <tr><th>Quando</th><th>Valor</th><th>Status</th><th>Pagamento</th><th>Terminal</th><th></th></tr>
+          </thead>
+          <tbody>
+            <template x-for="o in orders" :key="o.uuid">
+              <tr>
+                <td x-text="dateShort(o.createdAt)"></td>
+                <td><strong x-text="brl(o.amountCents)"></strong></td>
+                <td>
+                  <span class="pay-chip" :class="orderChipClass(o)" x-text="orderLabel(o)"></span>
+                  <span class="pay-sub" x-show="o.statusDetail" x-text="o.statusDetail"></span>
+                </td>
+                <td>
+                  <span x-text="o.paymentType || '—'"></span>
+                  <span class="pay-sub" x-show="o.installments || o.cardBrand" x-text="paymentLine(o)"></span>
+                </td>
+                <td x-text="o.terminalId || '—'"></td>
+                <td>
+                  <div class="pay-actions">
+                    <button class="btn secondary" type="button" x-show="!o.paid && ['creating','created','at_terminal','pending'].includes(o.status)" @click="cancelOrder(o)">Cancelar</button>
+                    <button class="btn secondary" type="button" x-show="o.paid && !o.refundedAmountCents && canRefund" @click="refundOrder(o)">Estornar</button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script nonce="<%= cspNonce %>">
+    function kurukPayPage(canManage, canCharge, canRefund) {
+      return {
+        canManage, canCharge, canRefund,
+        loading: true, error: '', notice: '',
+        state: null,
+        environment: 'producao',
+        connecting: false, connectingTimer: null, connectingTries: 0,
+        syncing: false, disconnecting: false, defaultBusy: false,
+        test: { amount: '', description: 'Cobrança de teste', terminalId: '' },
+        testOrder: null, testBusy: false, testError: '', testTimer: null,
+        orders: [],
+
+        async init() {
+          await this.load();
+          await this.loadOrders();
+        },
+
+        async load() {
+          this.loading = true;
+          try {
+            const r = await fetch('/api/kuruk-pay/account', { headers: { Accept: 'application/json' } });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Não foi possível consultar a conexão.'; return; }
+            this.state = d;
+            this.environment = d.environment || 'producao';
+            if (d.defaultTerminalId) this.test.terminalId = d.defaultTerminalId;
+            else if (d.terminals && d.terminals.length) this.test.terminalId = d.terminals[0].terminalId;
+            if (d.connected) this.notice = '';
+          } catch (e) {
+            this.error = 'Sem conexão com a nuvem. Verifique a internet deste computador.';
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async loadOrders() {
+          try {
+            const r = await fetch('/api/kuruk-pay/orders?limit=25', { headers: { Accept: 'application/json' } });
+            const d = await r.json();
+            if (r.ok) this.orders = d.orders || [];
+          } catch (e) { /* histórico é best-effort */ }
+        },
+
+        chipClass() {
+          if (!this.state) return 'off';
+          if (this.state.connected) return 'on';
+          return this.state.configured ? 'warn' : 'off';
+        },
+        chipLabel() {
+          if (!this.state) return 'Consultando…';
+          if (this.state.connected) return 'Mercado Pago conectado';
+          return this.state.configured ? 'Mercado Pago não conectado' : 'Integração indisponível';
+        },
+        accountLine() {
+          const a = this.state && this.state.account;
+          if (!a) return '';
+          const nome = a.nickname || a.email || ('usuário ' + (a.userId || '?'));
+          const data = a.connectedAt ? ' · desde ' + this.dateShort(a.connectedAt) : '';
+          return nome + data + (a.liveMode ? ' · produção' : ' · teste');
+        },
+        terminalsHint() {
+          const n = this.state ? this.state.terminals.length : 0;
+          if (!n) return 'Sincronize para buscar os terminais vinculados à conta.';
+          return n + (n === 1 ? ' terminal encontrado.' : ' terminais encontrados.') +
+            ' O padrão é usado quando o PDV não escolhe outro.';
+        },
+
+        async connect() {
+          this.error = ''; this.notice = '';
+          if (!this.canManage) return;
+          this.connecting = true;
+          try {
+            const r = await fetch('/api/kuruk-pay/account/connect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ environment: this.environment }),
+            });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Não foi possível iniciar a conexão.'; this.connecting = false; return; }
+            const win = window.open(d.url, '_blank', 'noopener');
+            if (!win) this.notice = 'Permita pop-ups ou abra o Mercado Pago em outra aba e conclua a autorização.';
+            this.startPolling();
+          } catch (e) {
+            this.error = 'Sem conexão com a nuvem.';
+            this.connecting = false;
+          }
+        },
+        startPolling() {
+          this.stopPolling();
+          this.connectingTries = 0;
+          this.connectingTimer = setInterval(async () => {
+            this.connectingTries++;
+            if (this.connectingTries > 45) { this.stopPolling(); this.connecting = false; return; }
+            const before = this.state && this.state.connected;
+            await this.load();
+            if (!before && this.state && this.state.connected) {
+              this.stopPolling();
+              this.connecting = false;
+              this.notice = 'Mercado Pago conectado. Terminais sincronizados.';
+              await this.loadOrders();
+            }
+          }, 4000);
+        },
+        stopPolling() {
+          if (this.connectingTimer) clearInterval(this.connectingTimer);
+          this.connectingTimer = null;
+        },
+
+        async disconnect() {
+          if (!this.canManage) return;
+          if (!await this.confirm('Desconectar a conta Mercado Pago? Você precisará autorizar de novo para cobrar.')) return;
+          this.disconnecting = true; this.error = ''; this.notice = '';
+          try {
+            const r = await fetch('/api/kuruk-pay/account/disconnect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ environment: this.state.environment }),
+            });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Não foi possível desconectar.'; return; }
+            this.state = null;
+            await this.load();
+          } finally {
+            this.disconnecting = false;
+          }
+        },
+
+        async sync() {
+          if (!this.canManage) return;
+          this.syncing = true; this.error = ''; this.notice = '';
+          try {
+            const r = await fetch('/api/kuruk-pay/terminals/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ environment: this.state.environment }),
+            });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Falha ao sincronizar terminais.'; return; }
+            this.notice = d.count
+              ? d.count + ' terminal(is) sincronizado(s).'
+              : 'Nenhum terminal Point encontrado nesta conta.';
+            await this.load();
+          } finally {
+            this.syncing = false;
+          }
+        },
+
+        async setDefault(t) {
+          if (!this.canManage) return;
+          this.defaultBusy = true; this.error = ''; this.notice = '';
+          try {
+            const r = await fetch('/api/kuruk-pay/terminals/default', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ environment: this.state.environment, terminalId: t.terminalId }),
+            });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Falha ao definir o terminal.'; return; }
+            this.test.terminalId = t.terminalId;
+            this.notice = 'Terminal padrão atualizado.';
+            await this.load();
+          } finally {
+            this.defaultBusy = false;
+          }
+        },
+
+        async testCharge() {
+          this.testError = ''; this.error = ''; this.notice = '';
+          const cents = this.parseMoney(this.test.amount);
+          if (cents < 1) { this.testError = 'Informe um valor válido.'; return; }
+          if (!this.test.terminalId) { this.testError = 'Escolha o terminal.'; return; }
+          this.testBusy = true;
+          this.testOrder = null;
+          try {
+            const r = await fetch('/api/kuruk-pay/orders', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({
+                amountCents: cents,
+                description: this.test.description || 'Cobrança de teste',
+                terminalId: this.test.terminalId,
+                origin: 'teste',
+              }),
+            });
+            const d = await r.json();
+            if (!r.ok) {
+              this.testError = d.error || 'Não foi possível enviar para a maquininha.';
+              this.testBusy = false;
+              return;
+            }
+            this.testOrder = d.order;
+            this.startTestPolling(d.order.uuid);
+          } catch (e) {
+            this.testError = 'Sem conexão com a nuvem.';
+            this.testBusy = false;
+          }
+        },
+        startTestPolling(uuid) {
+          this.stopTestPolling();
+          this.testTimer = setInterval(async () => {
+            try {
+              const r = await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(uuid), { headers: { Accept: 'application/json' } });
+              const d = await r.json();
+              if (!r.ok || !d.order) return;
+              this.testOrder = d.order;
+              if (d.order.paid || this.testFinished(d.order.status)) {
+                this.stopTestPolling();
+                this.testBusy = false;
+                if (d.order.paid) this.notice = 'Pagamento aprovado na maquininha.';
+                await this.loadOrders();
+              }
+            } catch (e) { /* tenta de novo no próximo ciclo */ }
+          }, 2000);
+        },
+        stopTestPolling() {
+          if (this.testTimer) clearInterval(this.testTimer);
+          this.testTimer = null;
+        },
+        testFinished(status) {
+          return ['failed', 'canceled', 'cancelled', 'expired', 'rejected', 'refunded'].includes(status);
+        },
+        get testFinal() { return !!this.testOrder && this.testFinished(this.testOrder.status); },
+        async cancelTest() {
+          if (!this.testOrder) return;
+          try {
+            await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(this.testOrder.uuid) + '/cancel', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: '{}',
+            });
+          } catch (e) { /* best-effort */ }
+          this.stopTestPolling();
+          this.testBusy = false;
+          await this.loadOrders();
+          this.testOrder = null;
+        },
+        testStatusLabel() {
+          if (!this.testOrder) return '';
+          if (this.testOrder.paid) return 'Pagamento aprovado!';
+          if (this.testFinal) return 'Cobrança encerrada';
+          return this.testOrder.status === 'creating' ? 'Preparando a cobrança…' : 'Aguardando a maquininha…';
+        },
+        testStatusHint() {
+          if (!this.testOrder) return '';
+          if (this.testOrder.paid) {
+            return 'Recebido ' + this.brl(this.testOrder.amountCents) + this.paymentLine(this.testOrder) + '.';
+          }
+          if (this.testFinal) return this.testOrder.error || 'A cobrança não foi concluída. Tente novamente.';
+          return 'Passe, insira ou aproxime o cartão no terminal. Não feche esta tela.';
+        },
+
+        async cancelOrder(o) {
+          if (!await this.confirm('Cancelar esta cobrança no terminal?')) return;
+          try {
+            const r = await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(o.uuid) + '/cancel', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: '{}',
+            });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Falha ao cancelar.'; return; }
+            await this.loadOrders();
+          } catch (e) { this.error = 'Sem conexão com a nuvem.'; }
+        },
+        async refundOrder(o) {
+          if (!await this.confirm('Estornar esta cobrança no Mercado Pago?')) return;
+          try {
+            const r = await fetch('/api/kuruk-pay/orders/' + encodeURIComponent(o.uuid) + '/refund', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: '{}',
+            });
+            const d = await r.json();
+            if (!r.ok) { this.error = d.error || 'Falha ao estornar.'; return; }
+            this.notice = 'Cobrança estornada.';
+            await this.loadOrders();
+          } catch (e) { this.error = 'Sem conexão com a nuvem.'; }
+        },
+
+        async confirm(msg) {
+          if (typeof window.confirmDlg === 'function') return window.confirmDlg(msg);
+          return window.confirm(msg);
+        },
+        parseMoney(v) {
+          const raw = String(v || '').replace(/[^\d,.-]/g, '');
+          const norm = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+          const n = Number(norm);
+          return Number.isFinite(n) ? Math.round(n * 100) : 0;
+        },
+        brl(cents) {
+          return 'R$ ' + (Number(cents || 0) / 100).toFixed(2).replace('.', ',')
+            .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        },
+        dateShort(iso) {
+          if (!iso) return '—';
+          const d = new Date(iso);
+          return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        },
+        orderLabel(o) {
+          if (o.paid) return 'Pago';
+          if (o.status === 'at_terminal') return 'No terminal';
+          if (o.status === 'creating') return 'Preparando';
+          return o.status;
+        },
+        orderChipClass(o) {
+          if (o.paid) return 'on';
+          if (['failed', 'canceled', 'cancelled', 'expired', 'rejected'].includes(o.status)) return 'err';
+          return 'warn';
+        },
+        paymentLine(o) {
+          if (!o) return '';
+          const partes = [];
+          if (o.paymentType) partes.push(o.paymentType);
+          if (o.cardBrand) partes.push(o.cardBrand);
+          if (o.installments) partes.push(o.installments + 'x');
+          return partes.length ? ' · ' + partes.join(' · ') : '';
+        },
+      };
+    }
+  </script>
+</body>
+</html>

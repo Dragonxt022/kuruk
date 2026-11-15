@@ -1,0 +1,281 @@
+<%- include('partials/mobile-head', { titulo: 'Kuruk Pay', grant, fresh }) %>
+
+<style>
+  .paym-hero { padding: 2px 0 6px; }
+  .paym-kicker { display: inline-flex; align-items: center; gap: 6px; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--m-primary, #ff8000); }
+  .paym-hero h2 { margin: 4px 0 4px; font-size: 1.28rem; line-height: 1.2; }
+  .paym-hero p { margin: 0; color: var(--m-muted, #6b7280); font-size: .84rem; line-height: 1.55; }
+  .paym-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: .68rem; font-weight: 800; margin-top: 8px; }
+  .paym-chip.on { background: #eaf7ee; color: #17663a; }
+  .paym-chip.off { background: #f3f4f6; color: #6b7280; }
+  .paym-chip.warn { background: #fff4e5; color: #b45309; }
+  .paym-chip.err { background: #fdecec; color: #b42318; }
+  .paym-card { background: var(--m-surface, #fff); border: 1px solid var(--m-border, #e5e7eb); border-radius: 16px; padding: 16px; margin-top: 12px; }
+  .paym-card h3 { margin: 0 0 3px; font-size: .95rem; }
+  .paym-card .paym-sub { margin: 0 0 12px; color: var(--m-muted, #6b7280); font-size: .78rem; line-height: 1.5; }
+  .paym-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .paym-row > * { flex: 1 1 auto; }
+  .paym-term { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--m-border, #e5e7eb); }
+  .paym-term:last-child { border-bottom: 0; }
+  .paym-term-main { flex: 1; min-width: 0; }
+  .paym-term-main strong { display: block; font-size: .86rem; }
+  .paym-term-main span { display: block; color: var(--m-muted, #6b7280); font-size: .72rem; margin-top: 1px; }
+  .paym-term form { margin: 0; }
+  .paym-alert { padding: 11px 13px; border-radius: 12px; font-size: .8rem; line-height: 1.5; margin-top: 12px; }
+  .paym-alert.ok { background: #eaf7ee; color: #17663a; }
+  .paym-alert.err { background: #fdecec; color: #b42318; }
+  .paym-alert.warn { background: #fff4e5; color: #8a5a00; }
+  .paym-orders .m-list-main { white-space: normal; }
+  .paym-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .paym-actions form { margin: 0; }
+  .paym-actions .m-btn { padding: 5px 10px; font-size: .72rem; width: auto; }
+  .paym-watch { position: sticky; top: 8px; z-index: 5; border: 2px solid var(--m-primary, #ff8000); }
+  .paym-watch-head { display: flex; align-items: center; gap: 10px; }
+  .paym-spinner { width: 20px; height: 20px; border-radius: 50%; border: 3px solid #ffe2c7; border-top-color: #ff8000; animation: paym-spin .8s linear infinite; flex: none; }
+  @keyframes paym-spin { to { transform: rotate(360deg); } }
+  .paym-watch strong { font-size: .95rem; }
+  .paym-watch p { margin: 6px 0 0; color: var(--m-muted, #6b7280); font-size: .78rem; }
+</style>
+
+<div class="paym-hero">
+  <span class="paym-kicker">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+    Kuruk Pay
+  </span>
+  <h2>Maquininha Point</h2>
+  <p>Conecte a conta Mercado Pago da sua loja. As vendas caem direto nela — o Kuruk só envia a cobrança para o terminal.</p>
+  <% if (account) { %>
+    <span class="paym-chip on">
+      ● <%= account.nickname || account.email || 'Conta conectada' %>
+      · <%= account.liveMode ? 'produção' : 'teste' %>
+    </span>
+  <% } else { %>
+    <span class="paym-chip off">Conta Mercado Pago não conectada</span>
+  <% } %>
+</div>
+
+<% if (ok) { %><div class="paym-alert ok"><%= ok %></div><% } %>
+<% if (erro) { %><div class="paym-alert err"><%= erro %></div><% } %>
+<% if (pay === 'ok') { %><div class="paym-alert ok">Conta Mercado Pago conectada. Sincronize os terminais abaixo.</div><% } %>
+<% if (pay === 'cancelado') { %><div class="paym-alert warn">A autorização foi cancelada no Mercado Pago.</div><% } %>
+<% if (pay === 'erro') { %><div class="paym-alert err">Não foi possível concluir a conexão. Tente de novo.</div><% } %>
+
+<% if (pedido) { %>
+  <section class="paym-card paym-watch" id="paym-watch" data-uuid="<%= pedido %>">
+    <div class="paym-watch-head">
+      <span class="paym-spinner" id="paym-spin"></span>
+      <div>
+        <strong id="paym-watch-title">Aguardando a maquininha…</strong>
+        <p id="paym-watch-text">Passe, insira ou aproxime o cartão no terminal. Não feche esta tela.</p>
+      </div>
+    </div>
+    <div class="paym-actions">
+      <form method="post" action="/m/pay/pedidos/<%= pedido %>/cancelar">
+        <button class="m-btn m-btn-sec" type="submit">Cancelar cobrança</button>
+      </form>
+    </div>
+  </section>
+<% } %>
+
+<% if (!app.configured) { %>
+  <div class="paym-alert warn">
+    O Kuruk Pay ainda não foi liberado nesta instalação. Peça ao suporte para cadastrar o
+    aplicativo Mercado Pago no painel do Kuruk.
+  </div>
+<% } else if (!account) { %>
+  <section class="paym-card">
+    <h3>Conectar Mercado Pago</h3>
+    <p class="paym-sub">
+      Você será levado ao site do Mercado Pago para entrar na conta da loja e autorizar o Kuruk Pay.
+      É a conta que recebe o dinheiro e onde os terminais Point estão cadastrados.
+    </p>
+    <% if (canManage) { %>
+      <form method="post" action="/m/pay/conectar" class="m-field">
+        <label for="paym-env">Ambiente</label>
+        <select id="paym-env" name="environment">
+          <option value="producao" selected>Produção (conta real)</option>
+          <option value="teste">Teste (usuário de teste)</option>
+        </select>
+        <button class="m-btn" type="submit" style="margin-top:12px">Conectar Mercado Pago</button>
+      </form>
+    <% } else { %>
+      <p class="paym-sub">Peça a um administrador da loja para conectar a conta Mercado Pago.</p>
+    <% } %>
+  </section>
+<% } else { %>
+  <section class="paym-card">
+    <h3>Conta conectada</h3>
+    <p class="paym-sub">
+      <%= account.nickname || 'Conta Mercado Pago' %>
+      <% if (account.email) { %>· <%= account.email %><% } %>
+      <% if (account.connectedAt) { %>· desde <%= account.connectedAt.slice(0, 10).split('-').reverse().join('/') %><% } %>
+    </p>
+    <% if (account.status !== 'conectado' && account.lastError) { %>
+      <div class="paym-alert err"><%= account.lastError %></div>
+    <% } %>
+    <div class="paym-row">
+      <% if (canManage) { %>
+      <form method="post" action="/m/pay/terminais/sincronizar">
+        <button class="m-btn m-btn-sec" type="submit">Sincronizar terminais</button>
+      </form>
+      <form method="post" action="/m/pay/desconectar" onsubmit="return confirm('Desconectar a conta Mercado Pago? Você precisará autorizar de novo para cobrar.');">
+        <input type="hidden" name="environment" value="<%= account.environment %>" />
+        <button class="m-btn m-btn-sec" type="submit">Desconectar</button>
+      </form>
+      <% } else { %>
+        <span class="paym-sub">Somente um administrador pode alterar a conexão.</span>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="paym-card">
+    <h3>Terminais Point</h3>
+    <p class="paym-sub">
+      <%= terminals.length %>
+      <%= terminals.length === 1 ? 'terminal encontrado' : 'terminais encontrados' %>.
+      O padrão é usado quando o PDV não escolhe outro.
+    </p>
+    <% if (!terminals.length) { %>
+      <p class="paym-sub">Nenhum terminal encontrado. Confira se a maquininha está vinculada à conta e toque em <strong>Sincronizar terminais</strong>.</p>
+    <% } else { %>
+      <% terminals.forEach(function (t) { %>
+        <div class="paym-term">
+          <div class="paym-term-main">
+            <strong><%= t.label %></strong>
+            <span>
+              <%= t.terminalId %>
+              <% if (t.posId) { %>· PDV <%= t.posId %><% } %>
+              <% if (t.operatingMode) { %>· <%= t.operatingMode %><% } %>
+            </span>
+          </div>
+          <% if (t.isDefault) { %>
+            <span class="paym-chip on">padrão</span>
+          <% } else if (canManage) { %>
+            <form method="post" action="/m/pay/terminal-padrao">
+              <input type="hidden" name="terminalId" value="<%= t.terminalId %>" />
+              <button class="m-btn m-btn-sec" type="submit">Usar este</button>
+            </form>
+          <% } %>
+        </div>
+      <% }) %>
+    <% } %>
+  </section>
+
+  <% if (terminals.length && canCharge) { %>
+    <section class="paym-card">
+      <h3>Cobrança de teste</h3>
+      <p class="paym-sub">Envie um valor para a maquininha e confirme o recebimento antes de usar no PDV.</p>
+      <form method="post" action="/m/pay/cobrar">
+        <div class="m-field">
+          <label for="paym-amount">Valor</label>
+          <input id="paym-amount" name="amount" inputmode="decimal" placeholder="0,00" autocomplete="off" required />
+        </div>
+        <div class="m-field">
+          <label for="paym-desc">Descrição</label>
+          <input id="paym-desc" name="description" maxlength="120" placeholder="Cobrança de teste" />
+        </div>
+        <div class="m-field">
+          <label for="paym-terminal">Terminal</label>
+          <select id="paym-terminal" name="terminalId">
+            <% terminals.forEach(function (t) { %>
+              <option value="<%= t.terminalId %>" <%= t.isDefault ? 'selected' : '' %>><%= t.label %></option>
+            <% }) %>
+          </select>
+        </div>
+        <button class="m-btn" type="submit" style="margin-top:12px">Enviar para a maquininha</button>
+      </form>
+    </section>
+  <% } %>
+<% } %>
+
+<% if (orders.length) { %>
+  <section class="m-section paym-orders">
+    <div class="m-section-head"><h2>Últimas cobranças</h2></div>
+    <ul class="m-list">
+      <% orders.forEach(function (o) {
+           var label = o.paid ? 'Pago' : (o.status === 'at_terminal' ? 'No terminal' : o.status);
+           var cls = o.paid ? 'on' : (['failed','canceled','expired','rejected'].indexOf(o.status) >= 0 ? 'err' : 'warn');
+      %>
+        <li>
+          <div class="m-list-static">
+            <span class="m-list-main"><%= o.description || 'Cobrança' %></span>
+            <span class="m-list-meta">
+              <%= o.createdAt.slice(11, 16) %> ·
+              <%= o.paymentType || 'aguardando' %>
+              <% if (o.installments) { %>· <%= o.installments %>x<% } %>
+            </span>
+            <span class="paym-chip <%= cls %>" style="margin-top:6px"><%= label %></span>
+            <% if (!o.paid && canCharge && ['created','at_terminal','creating','pending'].indexOf(o.status) >= 0) { %>
+              <div class="paym-actions">
+                <form method="post" action="/m/pay/pedidos/<%= o.uuid %>/cancelar">
+                  <button class="m-btn m-btn-sec" type="submit">Cancelar</button>
+                </form>
+              </div>
+            <% } %>
+          </div>
+          <strong class="m-list-value">R$ <%= brl(o.amountCents) %></strong>
+        </li>
+      <% }) %>
+    </ul>
+  </section>
+<% } %>
+
+<script>
+(function () {
+  var watch = document.getElementById('paym-watch');
+  if (!watch) return;
+  var uuid = watch.getAttribute('data-uuid');
+  var title = document.getElementById('paym-watch-title');
+  var text = document.getElementById('paym-watch-text');
+  var spin = document.getElementById('paym-spin');
+  var stopped = false;
+  var label = {
+    creating: 'Preparando a cobrança…',
+    created: 'Aguardando a maquininha…',
+    at_terminal: 'Aguardando a maquininha…',
+    pending: 'Aguardando a maquininha…',
+    processed: 'Pagamento aprovado!',
+    approved: 'Pagamento aprovado!',
+    canceled: 'Cobrança cancelada',
+    cancelled: 'Cobrança cancelada',
+    expired: 'A cobrança expirou',
+    failed: 'A maquininha recusou',
+    rejected: 'A maquininha recusou',
+    refunded: 'Cobrança estornada'
+  };
+  async function tick() {
+    if (stopped) return;
+    try {
+      var r = await fetch('/m/pay/pedidos/' + encodeURIComponent(uuid), { headers: { Accept: 'application/json' } });
+      var d = await r.json();
+      var o = d.order;
+      if (!o) return;
+      title.textContent = label[o.status] || o.status;
+      if (o.paid) {
+        stopped = true;
+        spin.style.display = 'none';
+        text.textContent = 'Recebido R$ ' + (o.amountCents / 100).toFixed(2).replace('.', ',') +
+          (o.paymentType ? ' · ' + o.paymentType : '') +
+          (o.installments ? ' · ' + o.installments + 'x' : '') + '. Atualizando…';
+        watch.style.borderColor = '#17663a';
+        setTimeout(function () { window.location.href = '/m/pay?ok=' + encodeURIComponent('Pagamento aprovado na maquininha.'); }, 1600);
+        return;
+      }
+      if (['failed', 'canceled', 'expired', 'rejected', 'cancelled'].indexOf(o.status) >= 0) {
+        stopped = true;
+        spin.style.display = 'none';
+        text.textContent = o.error || 'A cobrança não foi concluída. Tente de novo.';
+        watch.style.borderColor = '#b42318';
+        return;
+      }
+      text.textContent = 'Passe, insira ou aproxime o cartão no terminal. Não feche esta tela.';
+    } catch (e) {
+      text.textContent = 'Não consegui consultar agora. Tentando de novo…';
+    }
+    setTimeout(tick, 2000);
+  }
+  tick();
+})();
+</script>
+
+<%- include('partials/mobile-foot', { grant, ativo: 'pay' }) %>

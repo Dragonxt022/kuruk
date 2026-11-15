@@ -61,6 +61,9 @@
     <% if (typeof payments !== 'undefined' && payments.length) { %>
       <% payments.forEach(function (p) { %>
         <tr><td><%= p.method_name %></td><td class="right"><%= brl(p.amount_cents) %></td></tr>
+        <% if (p.point_brand || p.point_installments) { %>
+          <tr><td class="muted">Maquininha</td><td class="right muted"><%= [p.point_payment_type, p.point_brand, p.point_installments ? p.point_installments + 'x' : null].filter(Boolean).join(' · ') %></td></tr>
+        <% } %>
         <% if (p.received_cents != null && p.change_cents > 0) { %>
           <tr><td class="muted">Recebido / Troco</td><td class="right muted"><%= brl(p.received_cents) %> / <%= brl(p.change_cents) %></td></tr>
         <% } %>
@@ -115,6 +118,9 @@
     if (typeof payments !== 'undefined' && payments.length) {
       payments.forEach((p) => {
         cupom.push(linha(p.method_name, brl(p.amount_cents)));
+        if (p.point_brand || p.point_installments) {
+          cupom.push(linha('Maquininha', [p.point_payment_type, p.point_brand, p.point_installments ? p.point_installments + 'x' : null].filter(Boolean).join(' ')));
+        }
         if (p.received_cents != null && p.change_cents > 0) {
           cupom.push(linha('Recebido / Troco', brl(p.received_cents) + ' / ' + brl(p.change_cents)));
         }

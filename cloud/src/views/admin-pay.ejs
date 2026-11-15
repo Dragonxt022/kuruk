@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <%- include('partials/theme-init') %>
+  <title>Kuruk Cloud — Kuruk Pay</title>
+  <link rel="icon" type="image/png" href="/logo_kuruk-icon.png">
+  <%- include('partials/styles') %>
+  <style>
+    .pay-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 18px; align-items: start; }
+    @media (max-width: 980px) { .pay-grid { grid-template-columns: 1fr; } }
+    .pay-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-xs); }
+    .pay-card h2 { margin: 0 0 4px; font-size: 1.02rem; }
+    .pay-card .hint { margin: 0 0 16px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+    .pay-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .pay-field label { font-size: .78rem; font-weight: 700; color: var(--muted); }
+    .pay-field input { width: 100%; }
+    .pay-copy { display: flex; gap: 8px; align-items: center; }
+    .pay-copy code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 9px 11px; border-radius: 8px; background: var(--surface-hover); font-size: .74rem; }
+    .badge-line { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: .68rem; font-weight: 700; }
+    .pill.on { background: var(--primary-soft); color: var(--primary); }
+    .pill.off { background: var(--surface-hover); color: var(--muted); }
+    .pill.warn { background: #fff4e5; color: #b45309; }
+    .pill.err { background: #fdecec; color: #b42318; }
+    .pay-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .pay-table th { text-align: left; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .pay-table td { padding: 10px; border-bottom: 1px solid var(--border-light, var(--border)); vertical-align: top; }
+    .pay-table tr:last-child td { border-bottom: 0; }
+    .pay-empty { padding: 22px 0; text-align: center; color: var(--muted); font-size: .82rem; }
+    .pay-sub { display: block; color: var(--muted); font-size: .7rem; margin-top: 2px; }
+    .pay-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pay-actions form { margin: 0; }
+    .pay-btn-sm { padding: 4px 9px; font-size: .7rem; }
+    .pay-alert { padding: 10px 13px; border-radius: 10px; font-size: .8rem; margin-bottom: 14px; }
+    .pay-alert.ok { background: #eaf7ee; color: #17663a; }
+    .pay-alert.err { background: #fdecec; color: #b42318; }
+    .pay-flow { margin: 0; padding-left: 18px; color: var(--muted); font-size: .78rem; line-height: 1.65; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <main class="content">
+      <%- include('partials/navbar', { active: 'pay' }) %>
+      <div class="page">
+        <div class="page-header">
+          <p class="breadcrumb"><a href="/admin/gateways" style="color:inherit;text-decoration:none">Gateways de pagamento</a> · Kuruk Pay</p>
+          <h1>Kuruk Pay · maquininha Point</h1>
+          <p class="field-hint" style="margin-top:0">
+            Cada empresa conecta a <strong>própria conta Mercado Pago</strong> e usa os terminais Point dela.
+            O dinheiro cai direto na conta do lojista — este produto é separado da assinatura do Kuruk.
+          </p>
+        </div>
+
+        <% if (ok) { %><div class="pay-alert ok"><%= ok %></div><% } %>
+        <% if (error) { %><div class="pay-alert err"><%= error %></div><% } %>
+
+        <div class="pay-grid">
+          <section class="pay-card">
+            <h2>Aplicativo Kuruk Pay</h2>
+            <p class="hint">
+              Credenciais do aplicativo criado no Mercado Pago (App ID <strong>5049718943825028</strong>).
+              Elas identificam o Kuruk perante o MP; o token de cada lojista é obtido por OAuth.
+            </p>
+            <div class="badge-line">
+              <% if (app.configured) { %><span class="pill on">Aplicativo configurado</span><% } else { %><span class="pill err">Falta Client ID/Secret</span><% } %>
+              <% if (app.webhookSecretSet) { %><span class="pill on">Webhook assinado</span><% } else { %><span class="pill warn">Sem segredo de webhook</span><% } %>
+            </div>
+
+            <form method="post" action="/admin/pay/settings">
+              <div class="pay-field">
+                <label for="pay-client-id">Client ID (App ID)</label>
+                <input id="pay-client-id" name="clientId" value="<%= app.clientId || '' %>" placeholder="5049718943825028" autocomplete="off" />
+              </div>
+              <div class="pay-field">
+                <label for="pay-client-secret">Client Secret</label>
+                <input id="pay-client-secret" name="clientSecret" type="password" placeholder="<%= app.clientSecretSet ? '•••••••• (salvo — deixe em branco para manter)' : 'cole o Client Secret do aplicativo' %>" autocomplete="new-password" />
+              </div>
+              <div class="pay-field">
+                <label for="pay-webhook-secret">Segredo do webhook (opcional)</label>
+                <input id="pay-webhook-secret" name="webhookSecret" type="password" placeholder="<%= app.webhookSecretSet ? '•••••••• (salvo — deixe em branco para manter)' : 'chave secreta de notificações do aplicativo' %>" autocomplete="new-password" />
+              </div>
+              <button class="btn" type="submit">Salvar credenciais</button>
+            </form>
+
+            <div class="pay-field" style="margin-top:18px">
+              <label>URL de redirecionamento (cadastre no Mercado Pago)</label>
+              <div class="pay-copy">
+                <code id="pay-callback"><%= app.callbackUrl %></code>
+                <button type="button" class="btn secondary pay-btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('pay-callback').textContent).then(()=>this.textContent='copiado')">Copiar</button>
+              </div>
+              <span class="pay-sub">No painel do aplicativo: “URLs de redirecionamento”. Precisa ser exatamente esta.</span>
+            </div>
+          </section>
+
+          <section class="pay-card">
+            <h2>Como o lojista conecta</h2>
+            <ol class="pay-flow">
+              <li>O app (ou o Kuruk Web) abre o botão <strong>Conectar Mercado Pago</strong>.</li>
+              <li>O lojista entra na conta dele e autoriza o aplicativo Kuruk Pay.</li>
+              <li>O Kuruk guarda o token e sincroniza os terminais Point da conta.</li>
+              <li>No PDV, a venda em débito/crédito pode ser enviada para a maquininha.</li>
+            </ol>
+            <p class="pay-sub" style="margin-top:14px">
+              Se o Mercado Pago recusar o retorno, confira se a URL acima está cadastrada no
+              aplicativo e se ele está no modo de produção correto.
+            </p>
+          </section>
+        </div>
+
+        <section class="pay-card" style="margin-top:18px">
+          <h2>Contas conectadas</h2>
+          <p class="hint">Tokens ficam no servidor; esta tela mostra apenas de quem é a conta.</p>
+          <% if (!accounts.length) { %>
+            <div class="pay-empty">Nenhuma empresa conectou o Mercado Pago ainda.</div>
+          <% } else { %>
+            <div style="overflow-x:auto">
+              <table class="pay-table">
+                <thead>
+                  <tr><th>Empresa</th><th>Conta MP</th><th>Ambiente</th><th>Pedidos</th><th>Último pedido</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <% accounts.forEach(function (a) { %>
+                    <tr>
+                      <td>
+                        <a href="/admin/companies/<%= a.company_uuid %>"><%= a.company_name || a.company_uuid %></a>
+                      </td>
+                      <td>
+                        <%= a.nickname || a.email || ('usuário ' + (a.mp_user_id || '?')) %>
+                        <% if (a.status !== 'conectado') { %><span class="pay-sub"><%= a.status %> · <%= a.last_error || 'sem detalhe' %></span><% } %>
+                      </td>
+                      <td>
+                        <span class="pill <%= a.environment === 'producao' ? 'on' : 'off' %>"><%= a.environment === 'producao' ? 'Produção' : 'Teste' %></span>
+                        <% if (a.live_mode) { %><span class="pill on">live</span><% } %>
+                      </td>
+                      <td><%= Number(a.orders_count || 0) %></td>
+                      <td><%= a.last_order_at ? fmtDateTimeBr(a.last_order_at) : '—' %></td>
+                      <td>
+                        <div class="pay-actions">
+                          <form method="post" action="/admin/pay/accounts/<%= a.company_uuid %>/disconnect" onsubmit="return confirm('Desconectar esta conta? O lojista precisa autorizar de novo para voltar a cobrar.');">
+                            <input type="hidden" name="environment" value="<%= a.environment %>" />
+                            <button class="btn secondary pay-btn-sm" type="submit">Desconectar</button>
+                          </form>
+                        </div>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </section>
+
+        <section class="pay-card" style="margin-top:18px">
+          <h2>Últimas cobranças</h2>
+          <p class="hint">Pedidos enviados às maquininhas. O status é reconferido no Mercado Pago a cada consulta.</p>
+          <% if (!orders.length) { %>
+            <div class="pay-empty">Nenhuma cobrança registrada.</div>
+          <% } else { %>
+            <div style="overflow-x:auto">
+              <table class="pay-table">
+                <thead>
+                  <tr><th>Quando</th><th>Empresa</th><th>Valor</th><th>Status</th><th>Pagamento</th><th>Terminal</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <% orders.forEach(function (o) {
+                       var label = o.paid ? 'Pago' : (o.status === 'at_terminal' ? 'No terminal' : o.status);
+                       var cls = o.paid ? 'on' : (['failed','canceled','expired','rejected'].indexOf(o.status) >= 0 ? 'err' : 'warn');
+                  %>
+                    <tr>
+                      <td><%= fmtDateTimeBr(o.createdAt) %></td>
+                      <td><%= o.companyName || '—' %><span class="pay-sub"><%= o.environment %></span></td>
+                      <td><strong>R$ <%= brl(o.amountCents) %></strong><% if (o.refundedAmountCents) { %><span class="pay-sub">estornado R$ <%= brl(o.refundedAmountCents) %></span><% } %></td>
+                      <td><span class="pill <%= cls %>"><%= label %></span><% if (o.statusDetail) { %><span class="pay-sub"><%= o.statusDetail %></span><% } %></td>
+                      <td>
+                        <%= o.paymentType || '—' %>
+                        <% if (o.installments) { %><span class="pay-sub"><%= o.installments %>x · <%= o.cardBrand || '' %></span><% } else if (o.cardBrand) { %><span class="pay-sub"><%= o.cardBrand %></span><% } %>
+                      </td>
+                      <td><%= o.terminalId || '—' %><span class="pay-sub"><%= o.origin %></span></td>
+                      <td>
+                        <div class="pay-actions">
+                          <form method="post" action="/admin/pay/orders/<%= o.uuid %>/sync"><button class="btn secondary pay-btn-sm" type="submit">Atualizar</button></form>
+                          <% if (o.paid && !o.refundedAmountCents) { %>
+                            <form method="post" action="/admin/pay/orders/<%= o.uuid %>/refund" onsubmit="return confirm('Estornar esta cobrança no Mercado Pago?');"><button class="btn secondary pay-btn-sm" type="submit">Estornar</button></form>
+                          <% } %>
+                        </div>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
