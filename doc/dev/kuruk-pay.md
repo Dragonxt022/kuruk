@@ -1,4 +1,4 @@
-# Kuruk Pay — maquininha Point (conta Mercado Pago do lojista)
+﻿# Kuruk Pay — maquininha Point (conta Mercado Pago do lojista)
 
 Produto **separado** do gateway de assinatura do Kuruk (`cloud/src/gateway.ts`). Aqui:
 
@@ -28,7 +28,7 @@ Não confundir com:
 
 ## Configuração do aplicativo no Mercado Pago
 
-No painel de aplicações do Mercado Pago, no app **Kuruk-Pay**:
+No painel de aplicações do Mercado Pago, no app **Kuruk-Pay** (App ID `5049718943825028`):
 
 - **URL de redirecionamento**: exatamente `https://kuruk.com.br/api/pay/oauth/callback`
   (ou o valor mostrado em `/admin/pay`; pode ser sobrescrito por `MP_PAY_REDIRECT_URL`).
@@ -48,7 +48,7 @@ Migration `0057_kuruk_pay`:
 - `pay_terminals` — terminais Point sincronizados.
 - `pay_orders` — cobranças enviadas (auditoria e reconciliação).
 
-No desktop, a migration `0097_sale_payments_point` adiciona ao `sale_payments`:
+No desktop, a migration `0098_sale_payments_point` adiciona ao `sale_payments`:
 `point_order_uuid`, `point_brand`, `point_installments`, `point_payment_type`.
 
 ## Endpoints
@@ -78,7 +78,8 @@ No desktop, a migration `0097_sale_payments_point` adiciona ao `sale_payments`:
 ### Kuruk Web — `/m/pay`
 
 Telas e formulários para o lojista conectar, sincronizar, escolher terminal e fazer cobrança de teste.
-Permissão: `kurukpay.settings.manage`, `finance.paymethods.edit` ou `store.sales.create`.
+Permissão: `kurukpay.settings.manage`, `finance.paymethods.edit` ou `store.sales.create` (este último
+só vê/cobra; conectar e desconectar exigem os dois primeiros).
 
 ### App — `/app/kuruk-pay` e `/api/kuruk-pay`
 

@@ -1,4 +1,4 @@
--- 0097_sale_payments_point — dados da cobrança na maquininha Point (Kuruk Pay).
+﻿-- 0098_sale_payments_point — dados da cobrança na maquininha Point (Kuruk Pay).
 --
 -- Guardar o uuid do pedido no próprio pagamento é o que permite:
 --   * mostrar bandeira/parcelas no cupom e no histórico;
