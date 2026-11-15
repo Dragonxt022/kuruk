@@ -140,7 +140,8 @@
     }
     .plan-option.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--surface)); box-shadow: 0 0 0 2px var(--primary-soft); }
     .plan-option strong { display: block; font-size: .9rem; }
-    .plan-option .price { display: flex; align-items: baseline; gap: .35rem; margin: .15rem 0; font-size: 1.05rem; font-weight: 800; }
+    .plan-option .price { display: flex; align-items: baseline; gap: .35rem; margin: .15rem 0; font-size: 1.05rem; font-weight: 800; flex-wrap: wrap; }
+    .plan-option .price > * { white-space: nowrap; }
     .plan-option .price del { color: var(--text-muted); font-size: .8rem; font-weight: 500; }
     .plan-option .plan-promo {
       display: flex;
@@ -262,7 +263,6 @@
     }
     .pay-method-icon svg { width: 16px; height: 16px; }
     .pay-method-icon.pix { background: #0ea5a4; }
-    .pay-method-icon.boleto { background: #3b82f6; }
     .pay-method-icon.card { background: #8b5cf6; }
     .pay-method span:last-child { min-width: 0; }
     .pay-method strong { display: block; font-size: .82rem; }
@@ -815,6 +815,144 @@
     .pay-howto strong { font-size: .78rem; color: var(--text); }
     .pay-howto span { font-size: .76rem; color: var(--text-muted); line-height: 1.45; }
     @media (max-width: 520px) { .pay-howto > div { grid-template-columns: 1fr; gap: .1rem; } }
+
+    /* ─── Checkout em etapas (plano → forma → confirmação) ─── */
+    dialog.checkout-dialog {
+      width: min(700px, calc(100vw - 2rem));
+      max-width: 700px;
+      max-height: calc(100vh - 2rem);
+      padding: 0;
+      overflow: hidden;
+    }
+    dialog.checkout-dialog[open] { display: flex; flex-direction: column; }
+    .checkout-head {
+      display: flex; align-items: flex-start; gap: 1rem;
+      padding: 1.2rem 1.35rem .85rem;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .checkout-kicker {
+      margin: 0 0 .1rem; font-size: .66rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .07em; color: var(--primary);
+    }
+    .checkout-head h2 { margin: 0; font-size: 1.15rem; line-height: 1.25; letter-spacing: -.02em; }
+    .checkout-head p { margin: .2rem 0 0; color: var(--text-muted); font-size: .78rem; line-height: 1.4; }
+    .checkout-close {
+      width: 32px; height: 32px; flex: none; display: grid; place-items: center;
+      border: 1px solid var(--border-light); border-radius: 9px;
+      background: var(--surface); color: var(--text-muted); cursor: pointer;
+    }
+    .checkout-close:hover { background: var(--surface-hover); color: var(--text); }
+    .checkout-close svg { width: 16px; height: 16px; }
+    .checkout-steps { display: flex; gap: 1rem; padding: .8rem 1.35rem 0; flex-wrap: wrap; }
+    .checkout-step-dot { display: inline-flex; align-items: center; gap: .4rem; font-size: .7rem; color: var(--text-muted); font-weight: 500; }
+    .checkout-step-dot .n {
+      width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--surface-hover); color: var(--text-muted); font-size: .64rem; font-weight: 800;
+    }
+    .checkout-step-dot.active { color: var(--text); font-weight: 700; }
+    .checkout-step-dot.active .n { background: var(--primary); color: #fff; }
+    .checkout-step-dot.done .n { background: var(--primary-soft); color: var(--primary); }
+    .checkout-body { flex: 1; min-height: 0; overflow-y: auto; padding: 1rem 1.35rem 1.1rem; }
+    .checkout-step { animation: checkout-in .2s cubic-bezier(.22,1,.36,1); }
+    @keyframes checkout-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+
+    .checkout-lead { margin: 0 0 .8rem; color: var(--text-muted); font-size: .83rem; line-height: 1.5; }
+    .checkout-summary {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      padding: .8rem .9rem; border-radius: 12px; margin-bottom: 1rem;
+      border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border-light));
+      background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+    }
+    .checkout-summary strong { display: block; font-size: .9rem; line-height: 1.3; }
+    .checkout-summary small { display: block; margin-top: .12rem; color: var(--text-muted); font-size: .74rem; line-height: 1.35; }
+    .checkout-summary .checkout-price { font-size: 1.08rem; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
+    .checkout-summary .checkout-price small { display: block; text-align: right; font-size: .66rem; font-weight: 500; }
+
+    .pay-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+    .pay-choice {
+      position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: .3rem;
+      min-height: 178px; padding: 1rem; text-align: left; font: inherit; color: var(--text);
+      border: 1.5px solid var(--border-light); border-radius: 15px; background: var(--surface);
+      cursor: pointer; overflow: hidden;
+      transition: border-color .18s, transform .18s, box-shadow .18s;
+    }
+    .pay-choice:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 12px 26px -18px color-mix(in srgb, var(--primary) 70%, transparent); }
+    .pay-choice:disabled { opacity: .6; cursor: wait; transform: none; }
+    .pay-choice-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: #fff; margin-bottom: .3rem; }
+    .pay-choice-icon svg { width: 20px; height: 20px; }
+    .pay-choice-icon.pix { background: linear-gradient(135deg, #0f9f9e, #14b8a6); }
+    .pay-choice-icon.card { background: linear-gradient(135deg, #6d28d9, #a855f7); }
+    .pay-choice strong { font-size: .95rem; line-height: 1.25; }
+    .pay-choice .pay-choice-sub { font-size: .77rem; color: var(--text-muted); line-height: 1.45; max-width: 92%; }
+    .pay-choice .pay-choice-badge { margin-top: auto; font-size: .68rem; font-weight: 700; color: var(--primary); padding-top: .35rem; }
+    .mini-card {
+      position: absolute; right: .85rem; bottom: .85rem; width: 74px; height: 46px; border-radius: 7px;
+      background: linear-gradient(135deg, #4c1d95, #7c3aed 60%, #c084fc);
+      box-shadow: 0 12px 20px -12px rgba(76, 29, 149, .7);
+      transform: rotate(-8deg); transition: transform .25s;
+    }
+    .mini-card::before { content: ''; position: absolute; left: 7px; top: 9px; width: 12px; height: 9px; border-radius: 2px; background: rgba(255,255,255,.75); }
+    .mini-card::after { content: ''; position: absolute; right: 7px; bottom: 7px; width: 18px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.3); }
+    .pay-choice:hover .mini-card { transform: rotate(-2deg) translateY(-3px) scale(1.04); }
+    .checkout-safe { margin: .8rem 0 0; font-size: .72rem; color: var(--text-muted); text-align: center; line-height: 1.45; }
+
+    .card-visual {
+      width: min(270px, 100%); aspect-ratio: 1.586; margin: .15rem auto .95rem;
+      padding: .95rem 1rem; border-radius: 16px; color: #fff;
+      background: linear-gradient(135deg, #4c1d95, #7c3aed 55%, #c084fc);
+      box-shadow: 0 20px 34px -20px rgba(76, 29, 149, .75);
+      display: flex; flex-direction: column; justify-content: space-between;
+      animation: card-float 4.2s ease-in-out infinite;
+    }
+    @keyframes card-float { 0%, 100% { transform: translateY(0) rotate(-1.4deg); } 50% { transform: translateY(-6px) rotate(1.4deg); } }
+    .card-visual .chip { width: 34px; height: 25px; border-radius: 5px; background: linear-gradient(135deg, #fde68a, #f59e0b); }
+    .card-visual .num { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .12em; font-size: .82rem; }
+    .card-visual .brand { font-weight: 800; letter-spacing: .1em; font-size: .74rem; text-align: right; }
+
+    .checkout-test {
+      display: flex; gap: .6rem; align-items: flex-start;
+      margin-top: .8rem; padding: .7rem .8rem; border-radius: 10px;
+      border: 1px solid #f5c26b; background: #fff8ec;
+      color: #7c5a24; font-size: .75rem; line-height: 1.45;
+    }
+    .checkout-test svg { width: 17px; height: 17px; flex: none; margin-top: 1px; color: #b45309; }
+    .checkout-test strong { display: block; color: #92400e; font-size: .78rem; }
+    .checkout-test a { color: #92400e; text-decoration: underline; }
+    .checkout-hint { margin: .7rem 0 0; font-size: .74rem; color: var(--text-muted); line-height: 1.45; }
+
+    .checkout-footer {
+      display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap;
+      padding: .9rem 1.35rem; border-top: 1px solid var(--border-light); background: var(--surface);
+    }
+    .checkout-footer .right { display: flex; gap: .5rem; margin-left: auto; flex-wrap: wrap; }
+    .checkout-back {
+      border: 0; background: transparent; padding: .35rem .2rem; cursor: pointer;
+      color: var(--text-muted); font: inherit; font-size: .78rem;
+    }
+    .checkout-back:hover { color: var(--text); text-decoration: underline; }
+    .checkout-success { text-align: center; padding: .4rem 0 .2rem; }
+    .checkout-success-icon {
+      width: 54px; height: 54px; margin: 0 auto .7rem; border-radius: 50%;
+      display: grid; place-items: center; background: var(--primary-soft); color: var(--primary);
+    }
+    .checkout-success-icon svg { width: 28px; height: 28px; }
+    .checkout-success h3 { margin: 0 0 .35rem; font-size: 1.02rem; }
+    .checkout-success p { margin: 0 auto .9rem; max-width: 430px; color: var(--text-muted); font-size: .82rem; line-height: 1.5; }
+    .checkout-success .btn { margin-bottom: .5rem; }
+
+    @media (max-width: 560px) {
+      .pay-choice-grid { grid-template-columns: 1fr; }
+      .pay-choice { min-height: 132px; }
+      .checkout-steps { gap: .65rem; }
+      .checkout-body { padding: .9rem 1rem 1rem; }
+      .checkout-footer { padding: .8rem 1rem; }
+      .checkout-footer .right { width: 100%; }
+      .checkout-footer .right .btn { flex: 1; justify-content: center; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .checkout-step, .card-visual { animation: none; }
+      .pay-choice, .mini-card { transition: none; }
+    }
     .plan-option { position: relative; }
     .plan-option.active::after {
       content: '✓';
@@ -1062,8 +1200,11 @@
                   <td class="muted" x-text="c.paid_at ? fmtDateTime(c.paid_at) : '—'"></td>
                   <td class="muted" x-text="c.instructions || '—'" style="max-width:240px;white-space:pre-wrap"></td>
                   <td class="text-right">
-                    <button class="btn small" x-show="c.status === 'pendente'" @click="openPay(c)">Pagar</button>
-                    <a class="btn secondary small" x-show="c.public_url" :href="c.public_url" target="_blank" rel="noopener">Link</a>
+                    <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+                      <button class="btn small" x-show="c.status === 'pendente'" @click="openPay(c)">Pagar</button>
+                      <button class="btn secondary small" x-show="c.public_url" @click="copy(c.public_url)" title="Copiar o link de pagamento para enviar ao cliente">Copiar link</button>
+                      <button class="btn danger small" x-show="c.status === 'pendente'" @click="cancelCharge(c)" title="Cancelar esta cobrança pendente">Cancelar</button>
+                    </div>
                   </td>
                 </tr>
               </template>
@@ -1083,78 +1224,218 @@
     </section>
     <span class="error" x-text="error"></span>
 
-    <dialog x-ref="plansDlg" style="max-width:760px;width:92vw">
-      <div class="modal-header">
-        <h2>Escolha seu plano</h2>
-        <button type="button" class="modal-close" @click="$refs.plansDlg.close()">×</button>
+    <dialog x-ref="checkoutDlg" class="checkout-dialog" @close="onCheckoutClose()">
+      <header class="checkout-head">
+        <div style="flex:1;min-width:0">
+          <p class="checkout-kicker" x-text="checkoutKicker()"></p>
+          <h2 x-text="checkoutHeading()"></h2>
+          <p x-text="checkoutSubheading()"></p>
+        </div>
+        <button type="button" class="checkout-close" @click="closeCheckout()" aria-label="Fechar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </header>
+
+      <div class="checkout-steps" x-show="checkoutContext === 'plan' && checkoutStep !== 'result' && checkoutStep !== 'cardReady'">
+        <span class="checkout-step-dot" :class="{ active: checkoutStep === 'plan', done: checkoutStep !== 'plan' }"><span class="n">1</span>Plano</span>
+        <span class="checkout-step-dot" :class="{ active: checkoutStep === 'method', done: checkoutStep === 'details' }"><span class="n">2</span>Pagamento</span>
+        <span class="checkout-step-dot" :class="{ active: checkoutStep === 'details' }"><span class="n">3</span>Confirmar</span>
       </div>
-      <div class="modal-body">
-        <p class="muted" style="margin:0 0 .8rem">
-          O primeiro pagamento é imediato. A licença é estendida por 30 dias e os dias que
-          ainda restam do teste são preservados.
-        </p>
-        <div class="plan-options">
-          <template x-for="p in plans" :key="p.key">
-            <button type="button" class="plan-option" :class="{ active: selectedPlan === p.key }" @click="selectedPlan = p.key">
-              <strong x-text="p.label"></strong>
-              <span class="price plan-price">
-                <del x-show="p.promoted && p.originalPriceCents" x-text="brl(p.originalPriceCents)"></del>
-                <span x-text="brl(p.priceCents) + '/mês'"></span>
+
+      <div class="checkout-body">
+        <!-- ETAPA 1: PLANO -->
+        <div class="checkout-step" x-show="checkoutStep === 'plan'">
+          <p class="checkout-lead">
+            O primeiro pagamento é imediato. A licença é estendida por 30 dias e os dias que
+            ainda restam do teste são preservados.
+          </p>
+          <div class="plan-options">
+            <template x-for="p in plans" :key="p.key">
+              <button type="button" class="plan-option" :class="{ active: selectedPlan === p.key }" @click="selectedPlan = p.key">
+                <strong x-text="p.label"></strong>
+                <span class="price plan-price">
+                  <del x-show="p.promoted && p.originalPriceCents" x-text="brl(p.originalPriceCents)"></del>
+                  <span x-text="brl(p.priceCents) + '/mês'"></span>
+                </span>
+                <span class="plan-promo" x-show="p.promoted">
+                  <span x-text="p.promoLabel || 'Promoção'"></span>
+                  <span x-show="p.promoUntil" x-text="'até ' + fmtDate(p.promoUntil)"></span>
+                </span>
+                <small x-text="p.description + ' · ' + p.maxDevices + ' dispositivo(s)'"></small>
+              </button>
+            </template>
+          </div>
+          <div class="pay-loading" x-show="plansLoading" x-cloak>
+            <span class="pay-spinner"></span>
+            <span>Carregando planos da nuvem…</span>
+          </div>
+          <p class="error" x-show="!plansLoading && !plans.length"
+             x-text="subError || 'A nuvem respondeu sem planos. Verifique a conexão e tente novamente.'"></p>
+          <button type="button" class="btn secondary" x-show="!plansLoading && !plans.length"
+                  @click="reloadPlans()">Tentar novamente</button>
+          <p class="error" x-text="subError"></p>
+        </div>
+
+        <!-- ETAPA 2: FORMA DE PAGAMENTO -->
+        <div class="checkout-step" x-show="checkoutStep === 'method'">
+          <div class="checkout-summary">
+            <div>
+              <strong x-text="checkoutSummaryTitle()"></strong>
+              <small x-text="checkoutSummaryNote()"></small>
+            </div>
+            <span class="checkout-price" x-text="brl(checkoutAmount())"></span>
+          </div>
+
+          <div class="pay-choice-grid">
+            <button type="button" class="pay-choice" @click="chooseMethod('pix')" :disabled="subBusy || loading">
+              <span class="pay-choice-icon pix">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 14v3"/><path d="M14 20h3"/><path d="M20 20h.01"/></svg>
               </span>
-              <span class="plan-promo" x-show="p.promoted">
-                <span x-text="p.promoLabel || 'Promoção'"></span>
-                <span x-show="p.promoUntil" x-text="'até ' + fmtDate(p.promoUntil)"></span>
-              </span>
-              <small x-text="p.description + ' · ' + p.maxDevices + ' dispositivo(s)'"></small>
+              <strong>Pagar com Pix</strong>
+              <span class="pay-choice-sub">À vista. Libera 30 dias de licença assim que o pagamento é confirmado.</span>
+              <span class="pay-choice-badge">Aprovação na hora</span>
             </button>
+            <button type="button" class="pay-choice" @click="chooseMethod('card')" :disabled="subBusy || loading">
+              <span class="pay-choice-icon card">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M6 15h4"/></svg>
+              </span>
+              <strong>Assinatura no cartão</strong>
+              <span class="pay-choice-sub">Renova automaticamente todo mês. Você autoriza uma vez no Mercado Pago.</span>
+              <span class="pay-choice-badge">Cobrança recorrente</span>
+              <span class="mini-card" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p class="checkout-safe">Pagamento processado pelo Mercado Pago. O Kuruk não armazena os dados do seu cartão.</p>
+          <p class="error" x-text="subError"></p>
+        </div>
+
+        <!-- ETAPA 3: CONFIRMAR -->
+        <div class="checkout-step" x-show="checkoutStep === 'details'">
+          <div class="checkout-summary">
+            <div>
+              <strong x-text="checkoutSummaryTitle()"></strong>
+              <small x-text="checkoutSummaryNote()"></small>
+            </div>
+            <span class="checkout-price" x-text="brl(checkoutAmount())"></span>
+          </div>
+
+          <template x-if="checkoutMethod === 'card'">
+            <div class="card-visual" aria-hidden="true">
+              <span class="chip"></span>
+              <span class="num">•••• •••• •••• 4242</span>
+              <span class="brand">KURUK</span>
+            </div>
+          </template>
+
+          <label>E-mail do pagador</label>
+          <input type="text" inputmode="email" name="kuruk_payer_email" x-model="payerEmail" @input="subError = ''"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 data-lpignore="true" data-1p-ignore="true"
+                 :placeholder="isTestMode() ? 'test_user_...@testuser.com' : 'seu@email.com'" />
+          <p class="error" x-show="payerEmailError()" x-text="payerEmailError()"></p>
+
+          <div class="checkout-test" x-show="isTestMode()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5 8.5A2 2 0 0 0 6.7 21h10.6a2 2 0 0 0 1.7-3.5L14 9V3"/><path d="M7.5 15h9"/></svg>
+            <div>
+              <strong>Modo de teste do Mercado Pago</strong>
+              Use um comprador de teste da mesma conta que gerou a credencial. O e-mail precisa terminar em <code>@testuser.com</code>.
+              <a href="https://www.mercadopago.com.br/developers/panel/app" target="_blank" rel="noopener">Como criar uma conta de teste</a>
+            </div>
+          </div>
+
+          <p class="checkout-hint" x-text="checkoutHint()"></p>
+          <p class="error" x-text="subError"></p>
+        </div>
+
+        <!-- RESULTADO: PIX OU LINK DE CARTÃO -->
+        <div class="checkout-step" x-show="checkoutStep === 'result'">
+          <div class="checkout-summary" x-show="charge">
+            <div>
+              <strong x-text="charge ? charge.description : ''"></strong>
+              <small x-text="checkoutResultNote()"></small>
+            </div>
+            <span class="checkout-price" x-text="charge ? brl(charge.amount_cents) : ''"></span>
+          </div>
+
+          <div class="pay-loading" x-show="loading">
+            <span class="pay-spinner"></span>
+            <span>Falando com a nuvem…</span>
+          </div>
+
+          <div class="pay-alert" x-show="payError && !loading">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span x-text="payError"></span>
+          </div>
+
+          <template x-if="payment">
+            <div>
+              <template x-if="payment.mp_qr_code_base64 || payment.mp_qr_code">
+                <div class="pay-qr-block">
+                  <div class="pay-qr-copy">
+                    <strong>Escaneie o QR Code</strong>
+                    <small>Use o app do seu banco em Pix › Pagar com QR Code.</small>
+                  </div>
+                  <div x-show="payment.mp_qr_code_base64" class="pay-qr-image">
+                    <img :src="'data:image/png;base64,' + payment.mp_qr_code_base64" alt="QR code do Pix" />
+                  </div>
+                  <label>Pix copia e cola</label>
+                  <div class="pay-copy-row">
+                    <input type="text" readonly :value="payment.mp_qr_code || ''" />
+                    <button type="button" class="btn secondary" @click="copy(payment.mp_qr_code)">Copiar</button>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="payment.mp_init_point">
+                <div class="pay-link-card">
+                  <label>Pagamento no cartão</label>
+                  <p class="muted text-xs" style="margin:.2rem 0 .55rem">Você será levado ao ambiente seguro do Mercado Pago para pagar este valor no cartão.</p>
+                  <a class="btn" :href="payment.mp_init_point" target="_blank" rel="noopener">Abrir Mercado Pago</a>
+                </div>
+              </template>
+
+              <div class="pay-verify-row">
+                <button type="button" class="btn secondary small" @click="verify(false)" :disabled="loading">Já paguei — verificar agora</button>
+                <span class="muted text-xs" x-show="statusMsg" x-text="statusMsg"></span>
+              </div>
+              <p class="pay-polling" x-show="polling">Conferindo o pagamento automaticamente a cada 5 segundos…</p>
+
+              <template x-if="payment.public_url">
+                <div class="pay-link-card">
+                  <label>Link para pagar em outro aparelho</label>
+                  <div class="pay-copy-row">
+                    <input type="text" readonly :value="payment.public_url" />
+                    <button type="button" class="btn secondary" @click="copy(payment.public_url)">Copiar</button>
+                  </div>
+                  <p class="muted text-xs" style="margin:.35rem 0 0">Pode mandar por WhatsApp: a página abre sem login e mostra só esta cobrança.</p>
+                </div>
+              </template>
+            </div>
           </template>
         </div>
-        <div class="pay-loading" x-show="plansLoading" x-cloak>
-          <span class="pay-spinner"></span>
-          <span>Carregando planos da nuvem…</span>
-        </div>
-        <p class="error" x-show="!plansLoading && !plans.length"
-           x-text="subError || 'A nuvem respondeu sem planos. Verifique a conexão e tente novamente.'"></p>
-        <button type="button" class="btn secondary" x-show="!plansLoading && !plans.length"
-                @click="reloadPlans()">Tentar novamente</button>
-        <div class="payer-env" x-show="subGateway"
-             :class="subGateway && subGateway.environment === 'teste' ? 'is-teste' : (subGateway && subGateway.environment === 'producao' ? 'is-producao' : '')">
-          <span class="payer-env-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 12l2 2 4-4"/></svg>
-          </span>
-          <div>
-            <strong x-text="subGateway && subGateway.environment === 'teste' ? 'Ambiente de teste do Mercado Pago' : (subGateway && subGateway.environment === 'producao' ? 'Ambiente de produção' : 'Mercado Pago')"></strong>
-            <span x-text="payerEnvHint()"></span>
+
+        <!-- ASSINATURA CRIADA: FALTA AUTORIZAR NO MERCADO PAGO -->
+        <div class="checkout-step checkout-success" x-show="checkoutStep === 'cardReady'">
+          <div class="checkout-success-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
           </div>
+          <p>Depois de autorizar, a assinatura fica ativa e a licença é renovada automaticamente todo mês.</p>
+          <a class="btn" :href="checkoutInitPoint" target="_blank" rel="noopener" x-show="checkoutInitPoint">Autorizar no Mercado Pago</a>
         </div>
-        <label>E-mail do pagador</label>
-        <input type="text" inputmode="email" name="kuruk_payer_email" x-model="payerEmail"
-               autocomplete="off" autocapitalize="off" spellcheck="false"
-               data-lpignore="true" data-1p-ignore="true"
-               :placeholder="subGateway && subGateway.environment === 'teste' ? 'test_user_...@testuser.com' : 'seu@email.com'" />
-        <p class="error" x-show="payerEmailError()" x-text="payerEmailError()"></p>
-        <div class="pay-howto">
-          <div>
-            <strong>Pix</strong>
-            <span>Pagamento único de 30 dias. O cliente paga pelo app de qualquer banco e não precisa de conta no Mercado Pago.</span>
-          </div>
-          <div>
-            <strong>Cartão</strong>
-            <span>Assinatura automática, cobrada todo mês. Use o e-mail da conta Mercado Pago que vai autorizar a recorrência.</span>
-          </div>
-        </div>
-        <p class="error" x-text="subError"></p>
       </div>
-      <div class="modal-actions">
-        <button type="button" class="btn secondary" @click="$refs.plansDlg.close()">Agora não</button>
-        <button type="button" class="btn secondary" @click="buyUpfront()" :disabled="subBusy || !canSubmitPlan()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M7 15h3"/></svg>
-          <span x-text="subBusy ? 'Gerando Pix…' : 'Pagar 30 dias com Pix'"></span>
-        </button>
-        <button type="button" class="btn" @click="subscribe()" :disabled="subBusy || !canSubmitPlan()">
-          <span x-text="subBusy ? 'Gerando…' : 'Assinar no cartão'"></span>
-        </button>
-      </div>
+
+      <footer class="checkout-footer">
+        <button type="button" class="checkout-back" x-show="checkoutStep === 'plan'" @click="closeCheckout()">Agora não</button>
+        <button type="button" class="checkout-back" x-show="checkoutStep === 'method' || checkoutStep === 'details'" @click="checkoutBack()">← Voltar</button>
+        <div class="right">
+          <button type="button" class="btn" x-show="checkoutStep === 'plan'" @click="goMethod()" :disabled="!selectedPlan || plansLoading">Continuar</button>
+          <button type="button" class="btn" x-show="checkoutStep === 'details'" @click="confirmCheckout()"
+                  :disabled="subBusy || loading || !canSubmitPlan()"
+                  x-text="subBusy || loading ? 'Gerando…' : (checkoutMethod === 'pix' ? 'Gerar Pix' : 'Continuar no Mercado Pago')"></button>
+          <button type="button" class="btn" x-show="checkoutStep === 'result'" @click="closeCheckout()">Fechar</button>
+          <button type="button" class="btn" x-show="checkoutStep === 'cardReady'" @click="closeCheckout()">Entendi</button>
+        </div>
+      </footer>
     </dialog>
 
     <dialog x-ref="retentionDlg" style="max-width:520px;width:92vw">
@@ -1219,130 +1500,13 @@
       </div>
     </dialog>
 
-    <dialog x-ref="payDlg" class="pay-dialog" @close="stopPoll()">
-      <header class="pay-sheet-head">
-        <span class="pay-sheet-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M7 15h3"/><path d="M16 15h1"/></svg>
-        </span>
-        <div class="pay-sheet-title">
-          <h1 x-text="charge ? ('Pagar: ' + charge.description) : 'Pagar cobrança'"></h1>
-          <p>Escolha a forma de pagamento</p>
-        </div>
-        <button type="button" class="pay-sheet-close" @click="closePay()" aria-label="Fechar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
-      </header>
-
-      <div class="pay-sheet-summary">
-        <div><span>Valor</span><strong x-text="charge ? brl(charge.amount_cents) : '—'"></strong></div>
-        <div><span>Vencimento</span><strong x-text="charge ? fmtDate(charge.due_date) : '—'"></strong></div>
-      </div>
-
-      <div class="pay-method-grid">
-        <button type="button" class="pay-method" :class="{ active: method === 'pix' }" @click="generate('pix')" :disabled="loading">
-          <span class="pay-method-icon pix">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 14v3"/><path d="M14 20h3"/><path d="M20 20h.01"/></svg>
-          </span>
-          <span><strong>Pix</strong><small>QR Code na hora</small></span>
-        </button>
-        <button type="button" class="pay-method" :class="{ active: method === 'boleto' }" @click="generate('boleto')" :disabled="loading">
-          <span class="pay-method-icon boleto">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="5" x2="4" y2="19"/><line x1="7" y1="5" x2="7" y2="19"/><line x1="11" y1="5" x2="11" y2="19"/><line x1="14" y1="5" x2="14" y2="19"/><line x1="18" y1="5" x2="18" y2="19"/><line x1="21" y1="5" x2="21" y2="19"/></svg>
-          </span>
-          <span><strong>Boleto</strong><small>Link para pagar</small></span>
-        </button>
-        <button type="button" class="pay-method" :class="{ active: method === 'card' }" @click="generate('card')" :disabled="loading">
-          <span class="pay-method-icon card">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M6 15h4"/></svg>
-          </span>
-          <span><strong>Cartão</strong><small>Checkout Mercado Pago</small></span>
-        </button>
-      </div>
-
-      <div class="pay-sheet-body">
-        <div class="pay-loading" x-show="loading">
-          <span class="pay-spinner"></span>
-          <span>Falando com a nuvem…</span>
-        </div>
-
-        <div class="pay-alert" x-show="payError && !loading">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span x-text="payError"></span>
-        </div>
-
-        <template x-if="payment">
-          <div>
-            <!-- Pix: QR Code + copia e cola -->
-            <template x-if="payment.mp_qr_code_base64 || payment.mp_qr_code">
-              <div class="pay-qr-block">
-                <div class="pay-qr-copy">
-                  <strong>Escaneie o QR Code</strong>
-                  <small>Use o aplicativo do seu banco em Pix › Pagar com QR Code.</small>
-                </div>
-                <div x-show="payment.mp_qr_code_base64" class="pay-qr-image">
-                  <img :src="'data:image/png;base64,' + payment.mp_qr_code_base64" alt="QR code do Pix" />
-                </div>
-                <label>Pix copia e cola</label>
-                <div class="pay-copy-row">
-                  <input type="text" readonly :value="payment.mp_qr_code || ''" />
-                  <button class="btn secondary" @click="copy(payment.mp_qr_code)">Copiar</button>
-                </div>
-              </div>
-            </template>
-
-            <div class="pay-verify-row">
-              <button class="btn secondary small" @click="verify(false)" :disabled="loading">Já paguei — verificar agora</button>
-              <span class="muted text-xs" x-show="statusMsg" x-text="statusMsg"></span>
-            </div>
-            <p class="pay-polling" x-show="polling">Conferindo o pagamento automaticamente a cada 5 segundos…</p>
-
-            <template x-if="payment.mp_ticket_url || payment.mp_init_point">
-              <div class="pay-link-card">
-                <label x-text="method === 'card'
-                  ? 'Link do pagamento no cartão'
-                  : (method === 'boleto' ? 'Link do boleto' : 'Link do Pix no Mercado Pago')"></label>
-                <div class="pay-copy-row">
-                  <input type="text" readonly :value="payment.mp_init_point || payment.mp_ticket_url || ''" />
-                  <button class="btn secondary" @click="copy(payment.mp_init_point || payment.mp_ticket_url)">Copiar</button>
-                  <a class="btn secondary" :href="payment.mp_init_point || payment.mp_ticket_url" target="_blank" rel="noopener">Abrir</a>
-                </div>
-              </div>
-            </template>
-
-            <template x-if="payment.public_url">
-              <div class="pay-link-card">
-                <label>Link para o cliente pagar no celular</label>
-                <div class="pay-copy-row">
-                  <input type="text" readonly :value="payment.public_url" />
-                  <button class="btn secondary" @click="copy(payment.public_url)">Copiar</button>
-                </div>
-                <p class="muted text-xs">Pode mandar por WhatsApp ou e-mail: a página abre sem login e mostra só esta cobrança.</p>
-              </div>
-            </template>
-          </div>
-        </template>
-
-        <template x-if="!payment && !loading && !payError">
-          <div class="pay-empty">
-            <div class="pay-empty-art">
-              <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="20" width="48" height="32" rx="5"/><path d="M8 29h48"/><path d="M18 40h10"/><circle cx="45" cy="40" r="3"/></svg>
-            </div>
-            <strong>Pronto para receber</strong>
-            <p>Escolha Pix, boleto ou cartão para gerar o QR Code ou link de pagamento.</p>
-          </div>
-        </template>
-      </div>
-
-      <footer class="pay-sheet-footer">
-        <button class="btn secondary" @click="closePay()">Fechar</button>
-      </footer>
-    </dialog>
   </main>
   <script nonce="<%= cspNonce %>">
     function billingPage() {
       return {
         charges: [], urgent: [], error: '',
         charge: null, method: 'pix', payment: null,
+        checkoutStep: 'plan', checkoutContext: 'plan', checkoutMethod: '', checkoutInitPoint: '',
         loading: false, payError: '', statusMsg: '', polling: false, pollTimer: null,
         subscription: null, plans: [], subCompany: null, subReady: false, subBusy: false,
         subGateway: null,
@@ -1388,19 +1552,15 @@
               this.selectedPlan = preferido.key;
             }
             if (!this.payerEmail) {
-              // Sugere o e-mail da empresa; o e-mail da assinatura antiga só volta quando
-              // ela está ativa. Assinatura pendente/cancelada pode ter sido criada com o
-              // e-mail errado — sugerir de novo perpetuaria o erro.
-              const sugerido = (this.subscription?.status === 'autorizada' && this.subscription.payerEmail)
-                || this.subCompany?.email
-                || '';
-              const email = sugerido.trim().toLowerCase();
-              const ambiente = this.subGateway?.environment;
-              const emailCompativel = email.includes('@')
-                && (ambiente !== 'teste' || email.endsWith('@testuser.com'))
-                && (ambiente !== 'producao' || !email.endsWith('@testuser.com'));
-              // Não sugere um e-mail que o Mercado Pago vai recusar no ambiente atual.
-              this.payerEmail = emailCompativel ? sugerido : '';
+              // Ordem de preferência: o e-mail padrão configurado no painel (já pensado
+              // para o ambiente), o e-mail da assinatura ativa e, por último, o da empresa.
+              // Assinatura pendente/cancelada pode ter sido criada com o e-mail errado —
+              // sugerir de novo perpetuaria o erro.
+              this.payerEmail = this.preferredPayerEmail([
+                this.subGateway?.payerEmail,
+                this.subscription?.status === 'autorizada' && this.subscription.payerEmail,
+                this.subCompany?.email,
+              ]);
             }
             this.subError = '';
             this.subReady = true;
@@ -1465,7 +1625,7 @@
           if (!email.includes('@')) return 'Informe um e-mail válido.';
           const ambiente = this.subGateway?.environment;
           if (ambiente === 'teste' && !email.endsWith('@testuser.com')) {
-            return 'Este ambiente é de teste. Use o e-mail de um usuário de teste, terminado em @testuser.com.';
+            return 'No modo de teste, use o e-mail de um comprador de teste (@testuser.com) da mesma conta que gerou a credencial.';
           }
           if (ambiente === 'producao' && email.endsWith('@testuser.com')) {
             return 'Este ambiente é de produção. Use o e-mail de uma conta Mercado Pago real.';
@@ -1502,7 +1662,8 @@
           return !!this.payerEmailProblem();
         },
         canSubmitPlan() {
-          return !!this.selectedPlan && !!this.payerEmail.trim() && !this.payerEmailError();
+          const planOk = this.checkoutContext === 'charge' || !!this.selectedPlan;
+          return planOk && !!this.payerEmail.trim() && !this.payerEmailError();
         },
         canSubscribe() {
           const s = this.subscription;
@@ -1517,8 +1678,154 @@
           // Não limpa `subError` aqui: se a carga da assinatura falhou, o modal precisa
           // mostrar o motivo real, e não a mensagem genérica de "verifique a conexão".
           if (this.payerEmail && !this.payerEmail.includes('@')) this.payerEmail = '';
-          if (this.$refs.plansDlg) this.$refs.plansDlg.showModal();
+          this.checkoutContext = 'plan';
+          this.charge = null;
+          this.checkoutStep = 'plan';
+          this.checkoutMethod = '';
+          this.checkoutInitPoint = '';
+          this.payment = null;
+          this.payError = '';
+          this.subError = '';
+          this.statusMsg = '';
+          this.stopPoll();
+          if (this.$refs.checkoutDlg) this.$refs.checkoutDlg.showModal();
           if (!this.plans.length && !this.plansLoading) void this.reloadPlans();
+        },
+        closeCheckout() {
+          this.stopPoll();
+          if (this.$refs.checkoutDlg) this.$refs.checkoutDlg.close();
+        },
+        onCheckoutClose() {
+          this.stopPoll();
+        },
+        checkoutBack() {
+          if (this.subBusy || this.loading) return;
+          this.subError = '';
+          this.payError = '';
+          if (this.checkoutStep === 'details') {
+            this.checkoutStep = 'method';
+            return;
+          }
+          if (this.checkoutStep === 'method') {
+            if (this.checkoutContext === 'plan') this.checkoutStep = 'plan';
+            else this.closeCheckout();
+          }
+        },
+        goMethod() {
+          if (!this.selectedPlan) {
+            this.subError = 'Escolha um plano para continuar.';
+            return;
+          }
+          this.subError = '';
+          this.checkoutStep = 'method';
+        },
+        chooseMethod(method) {
+          if (this.subBusy || this.loading) return;
+          this.checkoutMethod = method;
+          this.subError = '';
+          // Cobrança já existente: em produção gera direto. No modo de teste mostra a
+          // etapa de e-mail, porque o pagador precisa ser um comprador de teste.
+          if (this.checkoutContext === 'charge') {
+            if (this.isTestMode() || !this.charge?.payer_email) {
+              this.checkoutStep = 'details';
+              return;
+            }
+            this.checkoutStep = 'result';
+            void this.generate(method);
+            return;
+          }
+          this.checkoutStep = 'details';
+        },
+        confirmCheckout() {
+          if (this.checkoutMethod === 'pix') void this.startPix();
+          else void this.startCard();
+        },
+        async startPix() {
+          if (this.checkoutContext === 'charge' && this.charge) {
+            this.checkoutStep = 'result';
+            await this.generate('pix', this.payerEmail.trim());
+            return;
+          }
+          await this.buyUpfront();
+        },
+        async startCard() {
+          if (this.checkoutContext === 'charge' && this.charge) {
+            this.checkoutStep = 'result';
+            await this.generate('card', this.payerEmail.trim());
+            return;
+          }
+          await this.subscribe();
+        },
+        checkoutPlan() {
+          return this.plans.find((p) => p.key === this.selectedPlan) || null;
+        },
+        checkoutAmount() {
+          if (this.checkoutContext === 'charge') return this.charge ? this.charge.amount_cents : 0;
+          const p = this.checkoutPlan();
+          return p ? p.priceCents : 0;
+        },
+        checkoutSummaryTitle() {
+          if (this.checkoutContext === 'charge') return this.charge ? this.charge.description : 'Cobrança';
+          const p = this.checkoutPlan();
+          return p ? 'Plano ' + p.label : 'Escolha um plano';
+        },
+        checkoutSummaryNote() {
+          if (this.checkoutContext === 'charge') {
+            return this.charge && this.charge.instructions ? this.charge.instructions : 'Cobrança pendente';
+          }
+          const p = this.checkoutPlan();
+          if (!p) return '';
+          const modo = this.checkoutStep === 'details'
+            ? (this.checkoutMethod === 'pix' ? 'Pagamento único — 30 dias de licença' : 'Cobrança automática todo mês')
+            : (p.description + ' · ' + p.maxDevices + ' dispositivo(s)');
+          return modo;
+        },
+        checkoutKicker() {
+          return this.checkoutContext === 'charge' ? 'Cobrança pendente' : 'Assinatura Kuruk';
+        },
+        checkoutHeading() {
+          if (this.checkoutStep === 'plan') return 'Escolha seu plano';
+          if (this.checkoutStep === 'method') return 'Como você quer pagar?';
+          if (this.checkoutStep === 'details') return this.checkoutMethod === 'pix' ? 'Pagar com Pix' : 'Assinatura no cartão';
+          if (this.checkoutStep === 'cardReady') return 'Assinatura criada';
+          return 'Pagamento';
+        },
+        checkoutSubheading() {
+          if (this.checkoutStep === 'plan') return 'Sem taxa de adesão. Cancele quando quiser.';
+          if (this.checkoutStep === 'method') return 'Escolha a forma mais confortável para você.';
+          if (this.checkoutStep === 'details') {
+            return this.checkoutMethod === 'pix'
+              ? 'Gere o QR Code e pague pelo app do seu banco.'
+              : 'Você será levado ao Mercado Pago para autorizar a assinatura.';
+          }
+          if (this.checkoutStep === 'cardReady') return 'Falta só a autorização do cartão.';
+          return 'Acompanhe a confirmação por aqui.';
+        },
+        checkoutHint() {
+          if (this.checkoutMethod === 'pix') {
+            return 'O Pix é um pagamento único de 30 dias. A licença é liberada assim que o banco confirmar.';
+          }
+          return 'A assinatura é cobrada todo mês no cartão autorizado. Você pode cancelar quando quiser, sem multa.';
+        },
+        checkoutResultNote() {
+          if (!this.payment) return 'Gerando o pagamento…';
+          if (this.checkoutMethod === 'pix') return 'Pague o QR Code abaixo. Esta tela confere sozinha.';
+          return 'Abra o Mercado Pago para concluir no cartão.';
+        },
+        isTestMode() {
+          return !!(this.subGateway && this.subGateway.environment === 'teste');
+        },
+        preferredPayerEmail(candidates) {
+          const ambiente = this.subGateway?.environment;
+          return (candidates || [])
+            .filter(Boolean)
+            .map((e) => String(e).trim())
+            .filter((e) => e.includes('@'))
+            .find((e) => {
+              const email = e.toLowerCase();
+              return (ambiente !== 'teste' || email.endsWith('@testuser.com'))
+                && (ambiente !== 'producao' || !email.endsWith('@testuser.com'));
+            }) || '';
         },
         async reloadPlans() {
           if (this.plansLoading) return;
@@ -1603,9 +1910,13 @@
               return;
             }
             await this.loadSubscription(false);
-            if (this.$refs.plansDlg) this.$refs.plansDlg.close();
-            if (body.initPoint) window.open(body.initPoint, '_blank', 'noopener');
-            showToast('Assinatura criada. Autorize o cartão no Mercado Pago.', 'info');
+            this.checkoutInitPoint = body.initPoint || '';
+            if (!this.checkoutInitPoint) {
+              this.subError = 'A assinatura foi criada, mas o Mercado Pago não devolveu o link de autorização. Abra a tela de assinatura e use “Verificar autorização”.';
+              return;
+            }
+            this.checkoutStep = 'cardReady';
+            showToast('Assinatura criada. Falta autorizar o cartão no Mercado Pago.', 'info');
           } catch (e) {
             this.subError = 'Falha de conexão ao criar a assinatura.';
           } finally {
@@ -1630,11 +1941,15 @@
               this.subError = body.error || 'Não foi possível gerar a cobrança à vista.';
               return;
             }
-            if (this.$refs.plansDlg) this.$refs.plansDlg.close();
-            if (body.charge) {
-              this.charges = [body.charge, ...this.charges.filter((c) => c.id !== body.charge.id)];
-              this.openPay(body.charge);
+            if (!body.charge) {
+              this.subError = 'A nuvem não devolveu a cobrança. Tente novamente.';
+              return;
             }
+            this.charge = body.charge;
+            this.charges = [body.charge, ...this.charges.filter((c) => c.id !== body.charge.id)];
+            // A cobrança já existe; agora gera o Pix na mesma tela, sem abrir outra janela.
+            this.checkoutStep = 'result';
+            await this.generate('pix');
           } catch (e) {
             this.subError = 'Falha de conexão ao gerar a cobrança à vista.';
           } finally {
@@ -1690,29 +2005,54 @@
 
         openPay(charge) {
           this.charge = charge;
+          this.checkoutContext = 'charge';
+          this.checkoutStep = 'method';
+          this.checkoutMethod = '';
+          this.checkoutInitPoint = '';
           this.payment = null;
           this.payError = '';
+          this.subError = '';
           this.statusMsg = '';
-          this.method = 'pix';
-          this.$refs.payDlg.showModal();
-          this.generate('pix');
-        },
-        closePay() {
+          // Cobrança antiga pode ter sido criada com e-mail real no modo de teste. Prefere
+          // o e-mail padrão do painel quando ele é compatível com o ambiente.
+          this.payerEmail = this.preferredPayerEmail([
+            charge.payer_email,
+            this.subGateway?.payerEmail,
+            this.subCompany?.email,
+          ]) || charge.payer_email || this.payerEmail || '';
           this.stopPoll();
-          this.$refs.payDlg.close();
+          if (this.$refs.checkoutDlg) this.$refs.checkoutDlg.showModal();
+        },
+        async cancelCharge(c) {
+          if (!await window.confirmDlg('Cancelar esta cobrança pendente? Ela sai do histórico de pagamentos.')) return;
+          try {
+            const r = await fetch(`/api/billing/charges/${c.id}/cancel`, { method: 'POST' });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) {
+              showToast(body.error || 'Não foi possível cancelar a cobrança.', 'error');
+              return;
+            }
+            this.charges = this.charges.filter((x) => x.id !== c.id);
+            this.urgent = this.urgent.filter((x) => x.id !== c.id);
+            showToast('Cobrança cancelada.', 'success');
+          } catch (e) {
+            showToast('Falha de conexão ao cancelar a cobrança.', 'error');
+          }
         },
 
-        async generate(method) {
+        async generate(method, payerEmail) {
           if (!this.charge) return;
           this.method = method;
+          this.checkoutStep = 'result';
           this.loading = true;
+          this.payment = null;
           this.payError = '';
           this.statusMsg = '';
           try {
             const r = await fetch(`/api/billing/charges/${this.charge.id}/payment`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ method }),
+              body: JSON.stringify({ method, payerEmail: payerEmail || undefined }),
             });
             const body = await r.json().catch(() => ({}));
             if (!r.ok) {
@@ -1755,7 +2095,7 @@
               this.stopPoll();
               const extra = body.extended_days ? ` Licença válida até ${fmtDate(body.valid_until)} (+${body.extended_days} dias).` : '';
               showToast('Pagamento confirmado! Cobrança baixada.' + extra, 'success');
-              this.$refs.payDlg.close();
+              this.closeCheckout();
               this.load();
               return;
             }

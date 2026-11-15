@@ -106,7 +106,7 @@ export function friendlyGatewayMessage(error: unknown): string {
     || /Uma das partes[^.]*é de teste/i.test(msg)
     || /Uma das partes[^.]*e de teste/i.test(msg)
   ) {
-    return 'Pagador e recebedor precisam estar no mesmo ambiente do Mercado Pago. Se a credencial é de teste, use o e-mail de um usuário de teste (test_user_...@testuser.com); se é de produção, use uma conta Mercado Pago real.';
+    return 'No modo de teste, o pagador precisa ser um comprador de teste da MESMA conta Mercado Pago que gerou o Access Token. Em Suas integrações → Contas de teste, crie um comprador e use o e-mail test_user_...@testuser.com. Em produção, use um e-mail real.';
   }
   return msg;
 }

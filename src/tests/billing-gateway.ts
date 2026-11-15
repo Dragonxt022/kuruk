@@ -1,9 +1,9 @@
 /**
- * Teste do pagamento da assinatura pelo Mercado Pago — Pix, boleto e cartão.
+ * Teste do pagamento da assinatura pelo Mercado Pago — Pix e cartão.
  *
  * Sobe um **Mercado Pago de mentira** dentro do próprio teste (servidor HTTP em processo) e
  * aponta o cloud para ele com `MP_API_BASE`. Assim o fluxo inteiro roda sem internet, sem
- * credencial real e sem dinheiro: criação do Pix, QR, boleto, link de cartão, página pública,
+ * credencial real e sem dinheiro: criação do Pix, QR, link de cartão, página pública,
  * webhook com assinatura HMAC e a baixa que estende a licença.
  *
  * Pré-requisitos (mesmos da Fase 6a..6d):
@@ -325,8 +325,8 @@ async function main(): Promise<void> {
     const htmlPublico = await publica.text();
     check('página pública responde 200', publica.status === 200, String(publica.status));
     check('página pública mostra descrição e valor', htmlPublico.includes('Mensalidade Kuruk') && htmlPublico.includes('129,90'));
-    check('página pública oferece Pix, boleto e cartão',
-      htmlPublico.includes('value="pix"') && htmlPublico.includes('value="boleto"') && htmlPublico.includes('value="card"'));
+    check('página pública oferece Pix e cartão',
+      htmlPublico.includes('value="pix"') && htmlPublico.includes('value="card"') && !htmlPublico.includes('value="boleto"'));
 
     const gerouPix = await form(`/pagar/${token}/gateway`, { method: 'pix' });
     check('gerar Pix redireciona de volta', gerouPix.status === 302, String(gerouPix.status));
@@ -353,18 +353,17 @@ async function main(): Promise<void> {
       validadeFromDetail(detalhe) === VALIDADE_ESPERADA,
       `${validadeFromDetail(detalhe)} (esperado ${VALIDADE_ESPERADA})`);
 
-    // ── Boleto e cartão numa segunda cobrança ──────────────────────────────
+    // ── Cartão numa segunda cobrança (boleto não faz parte do fluxo) ────────
     await form(`/admin/companies/${companyUuid}/charges`, {
-      description: 'Segunda via — boleto e cartão', amount: '50,00', dueDate: '2026-12-20',
+      description: 'Segunda via — cartão', amount: '50,00', dueDate: '2026-12-20',
     }, admin);
     detalhe = await (await api(`/admin/companies/${companyUuid}`, {}, admin)).text();
     const segunda = chargesFromDetail(detalhe).find((c) => c.description.includes('Segunda via'))!;
     const token2 = segunda.public_token!;
 
-    const gerouBoleto = await form(`/pagar/${token2}/gateway`, { method: 'boleto' });
-    check('gerar boleto redireciona de volta', gerouBoleto.status === 302, String(gerouBoleto.status));
+    const tentouBoleto = await form(`/pagar/${token2}/gateway`, { method: 'boleto' });
     const comBoleto = await (await fetch(`${CLOUD_URL}/pagar/${token2}`)).text();
-    check('link do boleto aparece na página', comBoleto.includes('mp.test/boleto/'));
+    check('boleto é recusado no fluxo', tentouBoleto.status === 302 && !comBoleto.includes('mp.test/boleto/'));
 
     const gerouCartao = await form(`/pagar/${token2}/gateway`, { method: 'card' });
     check('cartão manda para o Checkout Pro', gerouCartao.status === 302

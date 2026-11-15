@@ -21,6 +21,22 @@
     .pay-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 6px; }
     .pay-actions form { flex: 1 1 150px; }
     .pay-actions .btn { width: 100%; }
+    .pay-method-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .pay-method-grid form { margin: 0; }
+    .pay-method-card {
+      width: 100%; height: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+      padding: 14px; text-align: left; font: inherit; color: var(--text); cursor: pointer;
+      border: 1.5px solid var(--border-light); border-radius: 14px; background: var(--surface);
+      transition: border-color .15s, transform .15s;
+    }
+    .pay-method-card:hover { border-color: var(--primary); transform: translateY(-1px); }
+    .pay-method-card .icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; color: #fff; margin-bottom: 4px; }
+    .pay-method-card .icon svg { width: 19px; height: 19px; }
+    .pay-method-card .icon.pix { background: linear-gradient(135deg, #0f9f9e, #14b8a6); }
+    .pay-method-card .icon.card { background: linear-gradient(135deg, #6d28d9, #a855f7); }
+    .pay-method-card strong { font-size: .9rem; }
+    .pay-method-card span { font-size: .76rem; color: var(--text-muted); line-height: 1.4; }
+    @media (max-width: 520px) { .pay-method-grid { grid-template-columns: 1fr; } }
     .qr-box { text-align: center; margin-top: 16px; }
     .qr-box img { width: 220px; height: 220px; background: #fff; padding: 8px; border-radius: 12px; border: 1px solid var(--border-light); }
     .copy-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
@@ -78,21 +94,33 @@
               <p><%= charge.instructions %></p>
             <% } %>
           <% } else { %>
-            <h2>Como você quer pagar?</h2>
-            <div class="pay-actions">
-              <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
-                <input type="hidden" name="method" value="pix">
-                <button type="submit" class="btn">Pagar com Pix</button>
-              </form>
-              <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
-                <input type="hidden" name="method" value="boleto">
-                <button type="submit" class="btn secondary">Gerar boleto</button>
-              </form>
-              <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
-                <input type="hidden" name="method" value="card">
-                <button type="submit" class="btn secondary">Cartão de crédito</button>
-              </form>
-            </div>
+            <% var temPagamento = !!(charge.mp_qr_code_base64 || charge.mp_qr_code || charge.mp_ticket_url || charge.mp_init_point); %>
+            <% if (!temPagamento) { %>
+              <h2>Como você quer pagar?</h2>
+              <p class="field-hint" style="margin-top:0">Escolha Pix para pagar agora ou cartão para abrir o ambiente seguro do Mercado Pago.</p>
+              <div class="pay-method-grid">
+                <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
+                  <input type="hidden" name="method" value="pix">
+                  <button type="submit" class="pay-method-card">
+                    <span class="icon pix">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 14v3"/><path d="M14 20h3"/><path d="M20 20h.01"/></svg>
+                    </span>
+                    <strong>Pagar com Pix</strong>
+                    <span>QR Code na hora. Aprovação imediata.</span>
+                  </button>
+                </form>
+                <form method="post" action="/pagar/<%= charge.public_token %>/gateway">
+                  <input type="hidden" name="method" value="card">
+                  <button type="submit" class="pay-method-card">
+                    <span class="icon card">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M6 15h4"/></svg>
+                    </span>
+                    <strong>Cartão de crédito</strong>
+                    <span>Ambiente seguro do Mercado Pago.</span>
+                  </button>
+                </form>
+              </div>
+            <% } %>
 
             <% if (charge.mp_qr_code_base64) { %>
               <div class="qr-box">
@@ -108,13 +136,13 @@
 
             <% if (charge.mp_ticket_url) { %>
               <div class="link-row">
-                <a class="btn secondary" href="<%= charge.mp_ticket_url %>" target="_blank" rel="noopener"><%= charge.mp_method === 'boleto' ? 'Abrir boleto' : (charge.mp_method === 'card' ? 'Pagar com cartão' : 'Ver o Pix no Mercado Pago') %></a>
+                <a class="btn secondary" href="<%= charge.mp_ticket_url %>" target="_blank" rel="noopener">Ver o pagamento no Mercado Pago</a>
               </div>
             <% } %>
 
             <% if (charge.mp_init_point) { %>
               <div class="link-row">
-                <a class="btn secondary" href="<%= charge.mp_init_point %>" target="_blank" rel="noopener">Pagar com cartão</a>
+                <a class="btn" href="<%= charge.mp_init_point %>" target="_blank" rel="noopener">Pagar com cartão no Mercado Pago</a>
               </div>
             <% } %>
 

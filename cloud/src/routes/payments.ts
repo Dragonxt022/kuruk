@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getPool } from '../db';
 import { requireAdminAuth } from '../adminAuth';
 import {
-  GatewayError, createBoletoPayment, createCardPreference, createPixPayment,
+  GatewayError, createCardPreference, createPixPayment,
   forgetGatewayAccount, friendlyGatewayMessage, getGatewayAccount, getPayment, isConfigured,
   loadSettings, loadSettingsForView, mapPaymentStatus, normalizeEnvironment, publicPayUrl,
   saveEnvironmentSettings, setActiveEnvironment, setGatewayEnabled,
@@ -15,7 +15,7 @@ import {
  * Pagamento da assinatura no painel do cloud.
  *
  *  - `/admin/payments` — credenciais do Mercado Pago + tutorial de como obtê-las;
- *  - `/admin/companies/:uuid/charges/:id/gateway` — gera o pagamento (Pix, boleto ou link do
+ *  - `/admin/companies/:uuid/charges/:id/gateway` — gera o pagamento (Pix ou link do
  *    Checkout Pro) para uma cobrança da empresa;
  *  - `/admin/companies/:uuid/charges/:id/sync` — "já pagou?": relê o status no Mercado Pago
  *    e baixa a cobrança se estiver aprovado (útil quando o webhook não chegou, ex.: URL
@@ -126,7 +126,7 @@ router.post('/payments/test', requireAdminAuth, async (req, res) => {
 
 // ─────────────────────── Pagamento de uma cobrança ───────────────────────
 
-/** Dados da empresa que o gateway precisa (nome para o boleto, e-mail como pagador padrão). */
+/** Dados da empresa que o gateway precisa: nome e e-mail como pagador padrão. */
 async function companyPayer(uuid: string): Promise<{ name: string; email: string; document: string | null }> {
   const [rows] = await getPool().query('SELECT name, email, document FROM companies WHERE company_uuid = ?', [uuid]);
   const c = (rows as { name: string | null; email: string | null; document: string | null }[])[0];
@@ -171,9 +171,7 @@ router.post('/companies/:uuid/charges/:id/gateway', requireAdminAuth, async (req
   try {
     const token = await ensurePublicToken(charge.id);
     if (method === 'boleto') {
-      const r = await createBoletoPayment(input, settings);
-      await saveGatewayResult(charge.id, { ...r, method: 'boleto' });
-      redirectCompanyCharges(res, uuid, 'ok', 'Boleto gerado. Copie o link na cobrança para enviar ao cliente.');
+      redirectCompanyCharges(res, uuid, 'error', 'Boleto não está disponível. Use Pix ou link de cartão.');
       return;
     }
     if (method === 'card') {

@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { getPool } from '../db';
 import { requireCompanyAuth, type AuthedRequest } from '../auth';
 import {
-  GatewayError, createBoletoPayment, createCardPreference, createPixPayment,
+  GatewayError, createCardPreference, createPixPayment,
   friendlyGatewayMessage, getPayment, isConfigured, loadSettings, loadSettingsForView, mapPaymentStatus, publicPayUrl,
 } from '../gateway';
 import {
@@ -28,7 +28,7 @@ const router = Router();
  * Cobranças da própria empresa (o Kuruk instalado consome isto).
  *
  * A tela de Cobranças do app mostra a lista e, quando o gateway está configurado, oferece o
- * pagamento: Pix (QR + copia e cola), boleto (link) e cartão (link do Checkout Pro). O app
+ * pagamento: Pix (QR + copia e cola) e cartão (link do Checkout Pro). O app
  * NUNCA fala com o Mercado Pago — só com estas rotas, autenticadas pela licença da empresa
  * (mesmo par X-Kuruk-Company / X-Kuruk-License-Key de /api/sync e /api/backup).
  */
@@ -171,7 +171,7 @@ router.post('/subscription', requireCompanyAuth, async (req: AuthedRequest, res)
 });
 
 /**
- * Compra à vista de um plano (Pix, boleto ou cartão avulso). Cria a cobrança já vinculada
+ * Compra à vista de um plano (Pix ou cartão avulso). Cria a cobrança já vinculada
  * ao plano; quando o pagamento for aprovado, `settleCharge` estende a licença e ativa o
  * plano/dispositivos. O app usa o fluxo de pagamento que já existe em `/charges/:id/gateway`.
  */
@@ -198,6 +198,41 @@ router.post('/upfront', requireCompanyAuth, async (req: AuthedRequest, res) => {
 
   const { pct, discountCents } = await affiliateDiscountFor(companyUuid, plan.priceCents);
   const netAmountCents = Math.max(1, plan.priceCents - discountCents);
+  const description = `Kuruk — Plano ${plan.label} (à vista)`;
+  const instructions = `Pagamento à vista referente a ${plan.extendsDays} dias de licença.`;
+
+  // Reaproveita a cobrança à vista pendente do MESMO plano. Sem isto, cada clique em
+  // "Pagar com Pix" criava outra cobrança idêntica no histórico — e o cliente podia
+  // acabar pagando duas vezes a mesma renovação.
+  const [existingRows] = await getPool().query(
+    `SELECT id, public_token FROM charges
+      WHERE company_uuid = ? AND plan_key = ? AND status = 'pendente'
+        AND subscription_id IS NULL AND public_token IS NOT NULL
+      ORDER BY id DESC LIMIT 1`,
+    [companyUuid, plan.key],
+  );
+  const existing = (existingRows as { id: number; public_token: string }[])[0];
+  if (existing) {
+    await getPool().query(
+      `UPDATE charges
+          SET description = ?, instructions = ?, amount_cents = ?, original_amount_cents = ?,
+              discount_pct = ?, discount_cents = ?, due_date = CURDATE(), payer_email = ?, extends_days = ?
+        WHERE id = ?`,
+      [description, instructions, netAmountCents, plan.priceCents, pct, discountCents, payerEmail, plan.extendsDays, existing.id],
+    );
+    const charge = await getCharge(existing.id, companyUuid);
+    res.json({
+      charge: charge ? { ...charge, public_url: publicPayUrl(existing.public_token) } : null,
+      plan: plan.key,
+      originalAmountCents: plan.priceCents,
+      amountCents: netAmountCents,
+      discountPct: pct,
+      discountCents,
+      reused: true,
+    });
+    return;
+  }
+
   const publicToken = randomUUID();
   const [ins] = await getPool().query(
     `INSERT INTO charges
@@ -207,8 +242,8 @@ router.post('/upfront', requireCompanyAuth, async (req: AuthedRequest, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), 'pendente', ?, ?, ?, ?)`,
     [
       companyUuid,
-      `Kuruk — Plano ${plan.label} (à vista)`,
-      `Pagamento à vista referente a ${plan.extendsDays} dias de licença.`,
+      description,
+      instructions,
       netAmountCents,
       plan.priceCents,
       pct,
@@ -229,6 +264,26 @@ router.post('/upfront', requireCompanyAuth, async (req: AuthedRequest, res) => {
     discountPct: pct,
     discountCents,
   });
+});
+
+/** Cancela uma cobrança pendente da própria empresa (limpa duplicatas do histórico). */
+router.post('/charges/:id/cancel', requireCompanyAuth, async (req: AuthedRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Cobrança inválida.' });
+    return;
+  }
+  const [result] = await getPool().query(
+    `UPDATE charges
+        SET status = 'cancelada', mp_status = COALESCE(mp_status, 'cancelled'), mp_updated_at = NOW(3)
+      WHERE id = ? AND company_uuid = ? AND status = 'pendente'`,
+    [id, req.companyUuid],
+  );
+  if (!(result as { affectedRows: number }).affectedRows) {
+    res.status(400).json({ error: 'Só é possível cancelar uma cobrança pendente.' });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 /**
@@ -329,13 +384,21 @@ router.post('/retention/decline', requireCompanyAuth, async (req: AuthedRequest,
 });
 
 /** Monta o pedido de pagamento da cobrança da própria empresa. */
-async function paymentInput(chargeId: number, uuid: string) {
+async function paymentInput(chargeId: number, uuid: string, payerEmailOverride?: string) {
   const charge = await getCharge(chargeId, uuid);
   if (!charge) return { error: 'Cobrança não encontrada.' as const };
   if (charge.status !== 'pendente') return { error: 'Esta cobrança não está mais pendente.' as const };
 
   const settings = await loadSettings();
   if (!isConfigured(settings)) return { error: 'O pagamento online não está disponível nesta instalação.' as const };
+
+  const override = String(payerEmailOverride ?? '').trim();
+  if (override) {
+    if (!override.includes('@')) return { error: 'Informe um e-mail do pagador válido.' as const };
+    await getPool().query('UPDATE charges SET payer_email = ? WHERE id = ? AND company_uuid = ?', [override, charge.id, uuid]);
+    charge.payer_email = override;
+  }
+
   if (charge.mp_payment_id) {
     // Já existe pagamento gerado: devolve o que temos (o QR do Pix não muda).
     return { charge, settings, jaGerado: true as const };
@@ -361,13 +424,14 @@ async function paymentInput(chargeId: number, uuid: string) {
 }
 
 /**
- * Gera o pagamento da cobrança: `method` = pix | boleto | card.
+ * Gera o pagamento da cobrança: `method` = pix | card.
  * Devolve os dados do gateway para a tela desenhar (QR, código, link).
  */
 router.post('/charges/:id/gateway', requireCompanyAuth, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const method = String((req.body ?? {}).method ?? 'pix');
-  const ctx = await paymentInput(id, req.companyUuid!);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const method = String(body.method ?? 'pix');
+  const ctx = await paymentInput(id, req.companyUuid!, String(body.payerEmail ?? ''));
   if ('error' in ctx) {
     res.status(400).json({ error: ctx.error });
     return;
@@ -389,9 +453,7 @@ router.post('/charges/:id/gateway', requireCompanyAuth, async (req: AuthedReques
     }
 
     if (method === 'boleto') {
-      const r = await createBoletoPayment(ctx.input, ctx.settings);
-      await saveGatewayResult(ctx.charge.id, { ...r, method: 'boleto' });
-      res.json({ public_url: publicPayUrl(token), mp_method: 'boleto', mp_ticket_url: r.ticketUrl, mp_status: r.status });
+      res.status(400).json({ error: 'Boleto não está disponível. Use Pix ou cartão.' });
       return;
     }
     if (method === 'card') {

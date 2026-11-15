@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createRateLimiter } from '../rateLimit';
 import {
-  GatewayError, createBoletoPayment, createCardPreference, createPixPayment,
+  GatewayError, createCardPreference, createPixPayment,
   getPayment, isConfigured, loadSettings, mapPaymentStatus, publicPayUrl,
 } from '../gateway';
 import {
@@ -83,6 +83,11 @@ router.post('/:token/gateway', async (req, res) => {
   const method = String((req.body ?? {}).method ?? 'pix');
   const voltar = (kind: 'ok' | 'error', msg: string) => res.redirect(`/pagar/${token}?${kind}=${encodeURIComponent(msg)}`);
 
+  if (method === 'boleto') {
+    voltar('error', 'Boleto não está disponível. Escolha Pix ou cartão.');
+    return;
+  }
+
   if (charge.status !== 'pendente') {
     voltar('error', 'Esta cobrança não está mais pendente.');
     return;
@@ -111,12 +116,6 @@ router.post('/:token/gateway', async (req, res) => {
   };
 
   try {
-    if (method === 'boleto') {
-      const r = await createBoletoPayment(input, settings);
-      await saveGatewayResult(charge.id, { ...r, method: 'boleto' });
-      voltar('ok', 'Boleto gerado.');
-      return;
-    }
     if (method === 'card') {
       const back = publicPayUrl(token);
       const pref = await createCardPreference(input, settings, { success: back, pending: back, failure: back });

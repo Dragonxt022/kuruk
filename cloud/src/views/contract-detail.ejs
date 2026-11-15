@@ -151,10 +151,6 @@
                             <button type="submit" class="btn secondary small">Pix</button>
                           </form>
                           <form method="post" action="/admin/companies/<%= contrato.company_uuid %>/charges/<%= p.id %>/gateway">
-                            <input type="hidden" name="method" value="boleto">
-                            <button type="submit" class="btn secondary small">Boleto</button>
-                          </form>
-                          <form method="post" action="/admin/companies/<%= contrato.company_uuid %>/charges/<%= p.id %>/gateway">
                             <input type="hidden" name="method" value="card">
                             <button type="submit" class="btn secondary small">Cartão</button>
                           </form>

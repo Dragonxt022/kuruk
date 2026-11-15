@@ -453,10 +453,6 @@
                                   <button type="submit">Gerar Pix</button>
                                 </form>
                                 <form method="post" :action="'/admin/companies/<%= company.company_uuid %>/charges/' + ch.id + '/gateway'">
-                                  <input type="hidden" name="method" value="boleto">
-                                  <button type="submit">Gerar boleto</button>
-                                </form>
-                                <form method="post" :action="'/admin/companies/<%= company.company_uuid %>/charges/' + ch.id + '/gateway'">
                                   <input type="hidden" name="method" value="card">
                                   <button type="submit">Gerar link de cartão</button>
                                 </form>

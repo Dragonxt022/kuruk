@@ -16,7 +16,7 @@ import {
  * Fluxo comercial: instala e ativa o teste → cliente usa os 15 dias → contrato assinado. Aqui
  * o admin registra o contrato (número, prazo, valor mensal, PDF assinado) e o Kuruk gera o
  * **bloco de cobranças** de uma vez — 12 meses viram 12 parcelas, cada uma com seu vencimento
- * e já valendo Pix/boleto/cartão na tela de Cobranças do cliente.
+ * e já valendo Pix/cartão na tela de Cobranças do cliente.
  *
  * O documento vai como base64 no corpo JSON (o cloud não usa multipart em lugar nenhum:
  * catálogo, temas e mensagens seguem o mesmo padrão) e fica em `storage/contracts/`.

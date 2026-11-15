@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requirePermission } from '../permissions/middleware';
 import { audit } from '../audit/service';
 import {
-  acceptRetentionOffer, cancelCloudSubscription, createChargePayment, createCloudSubscription,
+  acceptRetentionOffer, cancelCloudCharge, cancelCloudSubscription, createChargePayment, createCloudSubscription,
   createUpfrontPlan, declineRetentionOffer, fetchChargeStatus, fetchCloudCharges,
   fetchCloudSubscription, fetchUrgentCharges, type ChargeMethod,
 } from './service';
@@ -91,18 +91,20 @@ router.get('/alert', requirePermission('billing.view'), async (_req, res) => {
   res.json({ count: urgent.length, charges: urgent });
 });
 
-const METHODS: ChargeMethod[] = ['pix', 'boleto', 'card'];
+const METHODS: ChargeMethod[] = ['pix', 'card'];
 
 /**
- * Gera o pagamento da cobrança (Pix, boleto ou link de cartão) para a tela de Cobranças.
+ * Gera o pagamento da cobrança (Pix ou link de cartão) para a tela de Cobranças.
  * O app não fala com o Mercado Pago: repassa o pedido ao cloud, que é quem tem a credencial.
+ * Boleto saiu do fluxo — a assinatura do Kuruk é Pix ou cartão.
  */
 router.post('/charges/:id/payment', requirePermission('billing.view'), async (req, res) => {
   const id = Number(req.params.id);
   const raw = String((req.body ?? {}).method ?? 'pix');
   const method: ChargeMethod = (METHODS as string[]).includes(raw) ? (raw as ChargeMethod) : 'pix';
+  const payerEmail = String((req.body ?? {}).payerEmail ?? '').trim();
 
-  const r = await createChargePayment(id, method);
+  const r = await createChargePayment(id, method, payerEmail || undefined);
   if (!r.ok) {
     res.status(502).json({ error: r.error });
     return;
@@ -110,6 +112,18 @@ router.post('/charges/:id/payment', requirePermission('billing.view'), async (re
   // Auditoria local do ato: gerar pagamento é ação financeira e o lojista pode perguntar quem fez.
   audit(req, 'gerar_pagamento', 'cloud_charge', id, null, { method, jaGerado: !!r.data.jaGerado });
   res.json(r.data);
+});
+
+/** Cancela uma cobrança pendente (limpa tentativas duplicadas do histórico). */
+router.post('/charges/:id/cancel', requirePermission('billing.view'), async (req, res) => {
+  const id = Number(req.params.id);
+  const r = await cancelCloudCharge(id);
+  if (!r.ok) {
+    res.status(502).json({ error: r.error });
+    return;
+  }
+  audit(req, 'cancelar_cobranca', 'cloud_charge', id, null, null);
+  res.json({ ok: true });
 });
 
 /** "Já pagou?" — a tela consulta enquanto o QR está aberto. */

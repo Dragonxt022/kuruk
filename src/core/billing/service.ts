@@ -130,11 +130,11 @@ async function cloudFetch<T>(path: string, init: RequestInit = {}): Promise<Bill
 }
 
 /** Gera (ou reaproveita) o pagamento da cobrança: Pix, boleto ou link de cartão. */
-export function createChargePayment(chargeId: number, method: ChargeMethod): Promise<BillingResult<ChargePayment>> {
+export function createChargePayment(chargeId: number, method: ChargeMethod, payerEmail?: string): Promise<BillingResult<ChargePayment>> {
   return cloudFetch<ChargePayment>(`/api/billing/charges/${chargeId}/gateway`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method }),
+    body: JSON.stringify({ method, payerEmail: payerEmail || undefined }),
   });
 }
 
@@ -144,6 +144,11 @@ export function createChargePayment(chargeId: number, method: ChargeMethod): Pro
  */
 export function fetchChargeStatus(chargeId: number): Promise<BillingResult<ChargeStatus>> {
   return cloudFetch<ChargeStatus>(`/api/billing/charges/${chargeId}/status`);
+}
+
+/** Cancela uma cobrança pendente (usado para limpar tentativas duplicadas do histórico). */
+export function cancelCloudCharge(chargeId: number): Promise<BillingResult<{ ok: true }>> {
+  return cloudFetch<{ ok: true }>(`/api/billing/charges/${chargeId}/cancel`, { method: 'POST' });
 }
 
 // ───────────────────────── Autoatendimento da assinatura ─────────────────────────
