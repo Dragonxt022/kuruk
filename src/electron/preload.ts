@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('kuruk', {
   window: {
     setFullscreen: (enabled: boolean) => ipcRenderer.invoke('window:set-fullscreen', enabled === true),
   },
+  /** Abre links externos no navegador do sistema (OAuth do Mercado Pago, por exemplo). */
+  system: {
+    openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url),
+  },
   hardware: {
     /** Lista as portas seriais (para o seletor de balança em Configurações). */
     listPorts: () => ipcRenderer.invoke('hardware:ports'),

@@ -435,6 +435,20 @@ async function boot() {
     return win.isFullScreen();
   });
 
+  // Links externos (OAuth do Mercado Pago, sites de terceiros): abre no navegador do
+  // sistema. O renderer manda a URL e aqui só aceitamos http/https.
+  ipcMain.handle('system:open-external', async (_event, url: unknown) => {
+    const raw = String(url ?? '').trim();
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return { ok: false };
+      await shell.openExternal(raw);
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
+
   // Splash primeiro: dá feedback imediato enquanto migrations/seeds/licença (trabalho
   // pesado e, em parte, síncrono) seguram o boot. A folga de 50 ms é para o renderer
   // pintar antes de o loop principal ficar ocupado.

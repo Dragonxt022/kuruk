@@ -64,6 +64,9 @@
     .pay-inline { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
     .pay-inline > .pay-field { flex: 1 1 150px; margin-bottom: 0; }
     .pay-hint-link { color: var(--primary); font-weight: 600; text-decoration: underline; }
+    .pay-connect-fallback { margin-top: 12px; padding: 12px; border: 1px dashed var(--border); border-radius: 12px; background: var(--surface-hover); }
+    .pay-connect-url { display: block; max-height: 86px; overflow: auto; word-break: break-all; font-size: .72rem; line-height: 1.45; background: var(--surface); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-light); }
+    .pay-connect-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -136,9 +139,14 @@
           <p class="hint" style="margin-top:12px" x-show="connecting">
             A janela do Mercado Pago foi aberta. Depois de autorizar, esta tela atualiza sozinha.
           </p>
-          <p class="hint" style="margin-top:12px" x-show="connectUrl" x-cloak>
-            Se a janela não abriu, <a class="pay-hint-link" :href="connectUrl" target="_blank" rel="noopener">clique aqui para autorizar no Mercado Pago</a>.
-          </p>
+          <div class="pay-connect-fallback" x-show="connectUrl" x-cloak>
+            <p class="hint" style="margin:0 0 8px">Se a janela não abriu, use o link de autorização abaixo:</p>
+            <code class="pay-connect-url" x-text="connectUrl"></code>
+            <div class="pay-connect-row">
+              <button class="btn secondary" type="button" @click="copyConnectUrl()">Copiar link</button>
+              <button class="btn" type="button" @click="openConnectUrl()">Abrir autorização no navegador</button>
+            </div>
+          </div>
           <p class="hint" style="margin-top:12px" x-show="!canManage">
             Seu usuário pode ver a conexão, mas não alterá-la.
           </p>
@@ -413,8 +421,8 @@
             const d = await r.json();
             if (!r.ok) { this.error = d.error || 'Não foi possível iniciar a conexão.'; this.connecting = false; return; }
             this.connectUrl = d.url || '';
-            const win = window.open(d.url, '_blank', 'noopener');
-            if (!win) this.notice = 'Permita pop-ups ou use o link abaixo para concluir a autorização.';
+            const opened = await this.openConnectUrl();
+            if (!opened) this.notice = 'Use o link de autorização abaixo para concluir.';
             this.startPolling();
           } catch (e) {
             this.error = 'Sem conexão com a nuvem.';
@@ -440,6 +448,33 @@
         stopPolling() {
           if (this.connectingTimer) clearInterval(this.connectingTimer);
           this.connectingTimer = null;
+        },
+
+        /**
+         * Abre a autorização no navegador do sistema. No Electron usamos a ponte
+         * `window.kuruk.system.openExternal` (window.open com noopener pode não abrir
+         * nada); no navegador comum cai no window.open normal.
+         */
+        async openConnectUrl() {
+          if (!this.connectUrl) return false;
+          try {
+            const bridge = window.kuruk && window.kuruk.system && window.kuruk.system.openExternal;
+            if (typeof bridge === 'function') {
+              const r = await bridge(this.connectUrl);
+              if (r && r.ok) return true;
+            }
+          } catch (e) { /* cai no window.open */ }
+          const win = window.open(this.connectUrl, '_blank');
+          return Boolean(win);
+        },
+        async copyConnectUrl() {
+          if (!this.connectUrl) return;
+          try {
+            await navigator.clipboard.writeText(this.connectUrl);
+            this.notice = 'Link de autorização copiado. Cole no navegador.';
+          } catch (e) {
+            this.notice = this.connectUrl;
+          }
         },
 
         async disconnect() {
