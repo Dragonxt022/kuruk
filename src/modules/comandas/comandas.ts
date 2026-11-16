@@ -75,21 +75,45 @@ function resolveLineUnitPrice(
   return pricing.resolvePrice(productId, qty, comanda.customer_id).unitCents;
 }
 
-export function openComanda(req: Request, params: OpenComandaParams): { ok: true; id: number } | { ok: false; error: string } {
+export function openComanda(
+  req: Request, params: OpenComandaParams,
+): { ok: true; id: number; created: boolean } | { ok: false; error: string } {
   assertAuth(req);
+  /**
+   * `store_tables.status` é o espelho da comanda aberta, mas pode ficar defasado: a
+   * sincronização aplica a mesa e a comanda como registros separados, e um fechamento
+   * interrompido deixa o status para trás. Confiar só nele recusava uma mesa livre com
+   * "Mesa ja esta ocupada" (era o erro que o cliente via no pedido pelo QR).
+   *
+   * Aqui a comanda aberta manda:
+   *  - existe comanda aberta → devolve a mesma (abrir de novo não duplica a conta);
+   *  - status "ocupada" sem comanda → a mesa de fato está livre; o estado órfão é
+   *    corrigido na transação abaixo.
+   */
+  let tableStatus: string | null = null;
   if (params.tableId) {
     const table = storeTableRepository.rawOne(
       "SELECT id, status FROM store_tables WHERE id = ? AND deleted_at IS NULL",
       params.tableId,
     ) as { id: number; status: string } | undefined;
     if (!table) return { ok: false, error: 'Mesa nao encontrada.' };
-    if (table.status !== 'livre') return { ok: false, error: 'Mesa ja esta ocupada.' };
+    tableStatus = table.status;
+    const open = comandaRepository.findOpenByTable(params.tableId) as { id: number } | undefined;
+    if (open) {
+      // Grade dessincronizada ("livre" com conta aberta): corrige o espelho para que a
+      // tela e as próximas aberturas enxerguem a mesa ocupada.
+      if (table.status === 'livre') storeTableRepository.occupy(params.tableId);
+      return { ok: true, id: Number(open.id), created: false };
+    }
   }
   // Garante atomicidade: a criação da comanda e a ocupação da mesa ocorrem juntas
-  // ou nenhuma das duas é persistida.
+  // ou nenhuma das duas é persistida. O `free` só aparece quando o espelho está órfão.
   let id: number;
   try {
     comandaRepository.transaction(() => {
+      if (params.tableId && tableStatus !== null && tableStatus !== 'livre') {
+        storeTableRepository.free(params.tableId);
+      }
       id = comandaRepository.create({
         table_id: params.tableId ?? null,
         customer_id: params.customerId ?? null,
@@ -106,7 +130,7 @@ export function openComanda(req: Request, params: OpenComandaParams): { ok: true
     return { ok: false, error: e instanceof Error ? e.message : 'Erro ao abrir comanda.' };
   }
   audit(req, 'abrir_comanda', 'comanda', id!, null, { tableId: params.tableId, customerId: params.customerId });
-  return { ok: true, id: id! };
+  return { ok: true, id: id!, created: true };
 }
 
 export function addItem(req: Request, comandaId: number, params: AddItemParams): { ok: true; id: number } | { ok: false; error: string } {

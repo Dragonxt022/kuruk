@@ -1,0 +1,3 @@
+-- Reversão impossível: a migração corrige um estado inconsistente (o status anterior não
+-- correspondia a nenhuma comanda). Recriar o valor antigo reintroduziria o bug de uma mesa
+-- livre recusando pedidos com "Mesa já está ocupada". Rollback é um no-op deliberado.

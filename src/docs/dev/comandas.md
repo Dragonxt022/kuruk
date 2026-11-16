@@ -14,8 +14,17 @@ resolvido no lançamento.
 
 ### Abrir
 
-`openComanda`: a mesa precisa estar `livre` (senão "Mesa já está ocupada"). A criação da
-comanda e a ocupação da mesa acontecem na **mesma transação**. Comanda nasce `aberta`.
+`openComanda` usa a **comanda aberta** como fonte da verdade, não só o espelho
+`store_tables.status` — que pode ficar defasado quando a sincronização aplica a mesa e a
+comanda em registros separados (ou quando um fechamento é interrompido). Se a mesa já tem
+comanda `aberta`, devolve a mesma (`created: false`) em vez de abrir uma segunda conta; se
+o status diz `ocupada` mas não existe comanda, o estado órfão é corrigido e a mesa abre
+normalmente. A criação da comanda e a ocupação da mesa acontecem na **mesma transação**.
+Comanda nasce `aberta`.
+
+A grade de Mesas reconcilia a divergência na leitura (`listTableStatus`): mostra o estado
+real (comanda aberta ⇔ ocupada) e grava o espelho de volta, para `transfer`, remover mesa
+e o pedido pelo QR não recusarem uma mesa livre com "Mesa já está ocupada".
 
 ### Lançar itens
 

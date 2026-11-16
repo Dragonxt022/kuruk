@@ -99,6 +99,28 @@ export const comandasController = {
       }
     }
 
+    // `store_tables.status` é espelho da comanda aberta (é o que `openComanda` mantém),
+    // mas pode ficar defasado quando o sync aplica mesa e comanda em registros separados.
+    // A grade reconcilia a divergência na leitura: mostra o estado real e corrige o
+    // espelho para que `transfer`, remover mesa e o próprio QR não recusem uma mesa livre
+    // com "Mesa já está ocupada".
+    let corrigidas = 0;
+    for (const t of tables) {
+      const comandaId = Number(t.comanda_id);
+      const temComanda = Number.isFinite(comandaId) && comandaId > 0;
+      const status = String(t.status ?? '');
+      if (temComanda && status !== 'ocupada') {
+        storeTableRepository.occupy(Number(t.id));
+        t.status = 'ocupada';
+        corrigidas++;
+      } else if (!temComanda && status !== 'livre') {
+        storeTableRepository.free(Number(t.id));
+        t.status = 'livre';
+        corrigidas++;
+      }
+    }
+    if (corrigidas) notifyTableEvents();
+
     res.json(tables.map((t) => {
       const comandaId = Number(t.comanda_id);
       return { ...t, kitchen_ready_count: Number.isFinite(comandaId) && comandaId > 0 ? (readyByComanda.get(comandaId) ?? 0) : 0 };

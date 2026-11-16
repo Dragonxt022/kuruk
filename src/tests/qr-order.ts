@@ -21,6 +21,7 @@ import { applyCommand } from '../core/sync/commands';
 import { openComanda, sendToKitchen } from '../modules/comandas/comandas';
 import { confirmQrOrders, receiveQrOrder, rejectQrOrders, setItemTakeaway } from '../modules/comandas/qrOrder';
 import { publishMenuNow } from '../core/menu/publisher';
+import { settingsRepository } from '../core/repositories/SettingsRepository';
 
 let failures = 0;
 function check(label: string, ok: boolean, extra = ''): void {
@@ -244,6 +245,57 @@ async function main(): Promise<void> {
     check('comando reaproveita a comanda da mesa',
       Number((viaCommand.result as { comandaId?: number }).comandaId) === comandaId);
   }
+
+  // ─── Mesa com o status defasado ─────────────────────────────────────────────
+  // `store_tables.status` pode ficar "ocupada" sem nenhuma comanda aberta (o sync
+  // aplicou a mesa mas não a comanda, ou um fechamento foi interrompido). Nesse
+  // estado o QR respondia "Mesa já está ocupada" para uma mesa livre.
+  const mesaOrfaUuid = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  db.prepare("INSERT INTO store_tables (label, status, uuid) VALUES ('Mesa orfa', 'ocupada', ?)").run(mesaOrfaUuid);
+  const mesaOrfa = db.prepare('SELECT id FROM store_tables WHERE uuid = ?').get(mesaOrfaUuid) as { id: number };
+
+  settingsRepository.set('pedido_qr.exigir_mesa_aberta', '0');
+  const naMesaOrfa = receiveQrOrder(req, {
+    orderUuid: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    tableUuid: mesaOrfaUuid,
+    items: [{ productUuid: UUID.main, qty: 1, takeaway: false }],
+  });
+  check('status "ocupada" sem comanda não recusa o pedido do QR',
+    naMesaOrfa.ok, naMesaOrfa.ok ? '' : naMesaOrfa.error);
+  if (naMesaOrfa.ok) {
+    const estado = db.prepare(
+      `SELECT t.status,
+              (SELECT COUNT(*) FROM comandas c
+                WHERE c.table_id = t.id AND c.status = 'aberta' AND c.deleted_at IS NULL) AS abertas
+         FROM store_tables t WHERE t.id = ?`,
+    ).get(mesaOrfa.id) as { status: string; abertas: number };
+    check('pedido abre a comanda e ocupa a mesa',
+      estado.status === 'ocupada' && estado.abertas === 1, JSON.stringify(estado));
+
+    // Grade defasada no sentido inverso: aparece "livre" mas a conta aberta existe.
+    // Abrir de novo devolve a MESMA comanda em vez de duplicar a conta.
+    db.prepare("UPDATE store_tables SET status = 'livre' WHERE id = ?").run(mesaOrfa.id);
+    const reaberta = openComanda(req, { tableId: mesaOrfa.id });
+    check('abrir com status "livre" reusa a comanda aberta',
+      reaberta.ok && reaberta.id === naMesaOrfa.result.comandaId && reaberta.created === false,
+      reaberta.ok ? `id=${reaberta.id}` : reaberta.error);
+    const statusReaberta = db.prepare('SELECT status FROM store_tables WHERE id = ?').get(mesaOrfa.id) as { status: string };
+    check('abrir corrige o status da mesa para ocupada', statusReaberta.status === 'ocupada', statusReaberta.status);
+  }
+
+  // Com a exigência ligada, a mesa órfã (livre de verdade) orienta a chamar o
+  // atendente — e nunca responde "ocupada".
+  const mesaOrfa2Uuid = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  db.prepare("INSERT INTO store_tables (label, status, uuid) VALUES ('Mesa orfa 2', 'ocupada', ?)").run(mesaOrfa2Uuid);
+  settingsRepository.set('pedido_qr.exigir_mesa_aberta', '1');
+  const comExigencia = receiveQrOrder(req, {
+    orderUuid: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    tableUuid: mesaOrfa2Uuid,
+    items: [{ productUuid: UUID.main, qty: 1, takeaway: false }],
+  });
+  check('mesa livre com status defasado não responde "ocupada"',
+    !comExigencia.ok && !/ocupada/i.test(comExigencia.error),
+    comExigencia.ok ? 'aceitou' : comExigencia.error);
 
   // ─── Publicação do menu (Trial não tem sync; o QR usa esta rota) ────────────
   process.env.KURUK_SYNC_SERVER_URL = 'https://kuruk.exemplo.test';

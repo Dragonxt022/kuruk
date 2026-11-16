@@ -228,15 +228,18 @@ export function receiveQrOrder(req: Request, payload: QrOrderPayload): ReceiveRe
     comandaId = Number(open.id);
   } else {
     if (requireOpenTable) {
-      return { ok: false, error: 'A mesa não está aberta. Peça ao atendente para liberar a mesa antes de fazer o pedido.' };
+      return { ok: false, error: 'A mesa ainda não foi aberta pelo atendente. Chame o atendente para abrir a mesa e envie o pedido de novo.' };
     }
     if (!autoOpen) {
-      return { ok: false, error: 'A mesa não está aberta. Peça ao atendente para liberar a mesa.' };
+      return { ok: false, error: 'A mesa ainda não foi aberta pelo atendente. Chame o atendente para abrir a mesa.' };
     }
     const opened = openComanda(req, { tableId: table.id });
     if (!opened.ok) return { ok: false, error: opened.error };
     comandaId = opened.id;
-    createdComanda = true;
+    // `openComanda` devolve a comanda que já existia quando o status da mesa estava
+    // defasado ("livre" com conta aberta). Só uma comanda criada por ESTE pedido pode
+    // ser cancelada se a gravação dos itens falhar.
+    createdComanda = opened.created;
   }
 
   let orderId = 0;

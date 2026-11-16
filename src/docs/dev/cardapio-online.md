@@ -151,7 +151,8 @@ Endpoints principais:
 - **Pedido pelo celular não está disponível nesta loja agora** — a publicação do cardápio
   está desligada (capability desligada, licença inválida ou app sem publicar).
 - **A mesa não está aberta** — a regra `exigir_mesa_aberta` está ligada e não há comanda
-  aberta; o atendente precisa abrir a mesa.
+  aberta; o atendente precisa abrir a mesa. O status `ocupada` da mesa não é consultado
+  aqui: uma mesa marcada como ocupada **sem** comanda aberta é tratada como livre.
 - **Item não está mais disponível** — o cardápio mudou entre a montagem e o envio; o
   cliente deve atualizar a página e remontar o pedido.
 - **Já existem pedidos desta mesa aguardando o atendente** — limite de 2 rodadas pendentes;
