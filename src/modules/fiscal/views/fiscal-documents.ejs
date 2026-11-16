@@ -34,6 +34,44 @@
       <span x-text="ambiente === 1 ? 'Emitindo em PRODUÇÃO — as notas têm valor fiscal.' : 'Emitindo em HOMOLOGAÇÃO — as notas são de teste e não têm valor fiscal.'"></span>
     </div>
 
+    <section class="panel" x-show="!loading" x-cloak>
+      <h2>Emitir nota de uma venda</h2>
+      <p class="hint mt-0">
+        O emissor simulado assina o XML com o certificado instalado e devolve um protocolo
+        de homologação. Nada é transmitido à SEFAZ.
+      </p>
+      <div class="toolbar">
+        <select class="input-search" x-model.number="saleId">
+          <option value="">Escolha uma venda concluída…</option>
+          <template x-for="s in vendas" :key="s.id">
+            <option :value="s.id" x-text="textoVenda(s)"></option>
+          </template>
+        </select>
+        <button class="btn secondary" @click="carregarVendas()" :disabled="carregandoVendas"
+                x-text="carregandoVendas ? 'Carregando…' : 'Atualizar vendas'"></button>
+        <button class="btn" @click="emitir()" :disabled="emitindo || !saleId"
+                x-text="emitindo ? 'Emitindo…' : 'Emitir nota'"></button>
+        <span class="muted text-sm" x-show="emitMsg" x-text="emitMsg"></span>
+      </div>
+      <p class="hint" x-show="!vendas.length && !carregandoVendas">
+        Nenhuma venda concluída sem nota no momento.
+      </p>
+    </section>
+
+    <section class="panel" x-show="cancelTarget" x-cloak>
+      <h2>Cancelar nota <span x-text="cancelTarget ? (cancelTarget.serie + '/' + cancelTarget.number) : ''"></span></h2>
+      <p class="hint mt-0">
+        O cancelamento gera um evento assinado e mantém o XML da autorização arquivado.
+      </p>
+      <label>Motivo do cancelamento (mín. 15 caracteres)</label>
+      <input class="input" x-model="cancelMotivo" maxlength="255" placeholder="Ex.: Erro de digitação na venda" />
+      <div class="toolbar">
+        <button class="btn" @click="confirmarCancelamento()" :disabled="cancelando || cancelMotivo.trim().length < 15"
+                x-text="cancelando ? 'Cancelando…' : 'Confirmar cancelamento'"></button>
+        <button class="btn secondary" @click="cancelTarget = null; cancelMotivo = ''">Voltar</button>
+      </div>
+    </section>
+
     <div class="toolbar">
       <a class="btn secondary" href="/app/fiscal/configuracao">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -108,8 +146,13 @@
                 <div class="doc-motive" x-show="d.motive" x-text="d.motive"></div>
               </td>
               <td class="text-right">
-                <a class="btn secondary small" x-show="d.key" :href="'/api/fiscal/documentos/' + d.id + '/xml'"
+                <a class="btn secondary small" x-show="d.xml_path" :href="'/api/fiscal/documentos/' + d.id + '/xml'"
                    title="Baixar o XML autorizado desta nota">XML</a>
+                <a class="btn secondary small" x-show="d.cancel_xml_path"
+                   :href="'/api/fiscal/documentos/' + d.id + '/xml?tipo=cancelamento'"
+                   title="Baixar o XML do evento de cancelamento">XML cancel.</a>
+                <button class="btn secondary small" x-show="d.status === 'autorizada'"
+                        @click="abrirCancelamento(d)" title="Cancelar esta nota">Cancelar</button>
               </td>
             </tr>
           </template>
@@ -126,6 +169,15 @@
         ambiente: 2,
         from: '', to: '', status: '',
         summary: null,
+
+        vendas: [],
+        saleId: '',
+        carregandoVendas: true,
+        emitindo: false,
+        emitMsg: '',
+        cancelTarget: null,
+        cancelMotivo: '',
+        cancelando: false,
 
         queryParams() {
           const p = new URLSearchParams();
@@ -158,6 +210,72 @@
           this.summary = sumRes.ok ? await sumRes.json() : null;
           if (cfgRes.ok) this.ambiente = (await cfgRes.json()).config?.ambiente ?? 2;
           this.loading = false;
+          this.carregarVendas();
+        },
+
+        async carregarVendas() {
+          this.carregandoVendas = true;
+          try {
+            const r = await fetch('/api/fiscal/documentos/vendas-disponiveis');
+            if (r.ok) this.vendas = await r.json();
+          } finally {
+            this.carregandoVendas = false;
+          }
+        },
+
+        textoVenda(s) {
+          return '#' + s.id + ' — ' + (s.customer || 'Consumidor') + ' — ' + this.brl(s.total_cents);
+        },
+
+        async emitir() {
+          if (!this.saleId) return;
+          this.emitindo = true;
+          this.emitMsg = '';
+          try {
+            const r = await fetch('/api/fiscal/documentos/emitir', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ saleId: Number(this.saleId) }),
+            });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) {
+              this.emitMsg = body.error || 'Não foi possível emitir a nota.';
+              return;
+            }
+            this.saleId = '';
+            window.showToast('Nota emitida e autorizada no simulador.', 'success');
+            await this.load();
+          } finally {
+            this.emitindo = false;
+          }
+        },
+
+        abrirCancelamento(d) {
+          this.cancelTarget = d;
+          this.cancelMotivo = '';
+        },
+
+        async confirmarCancelamento() {
+          if (!this.cancelTarget || this.cancelMotivo.trim().length < 15) return;
+          this.cancelando = true;
+          try {
+            const r = await fetch('/api/fiscal/documentos/' + this.cancelTarget.id + '/cancelar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ motivo: this.cancelMotivo.trim() }),
+            });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) {
+              window.showToast(body.error || 'Não foi possível cancelar a nota.', 'error');
+              return;
+            }
+            this.cancelTarget = null;
+            this.cancelMotivo = '';
+            window.showToast('Nota cancelada.', 'success');
+            await this.load();
+          } finally {
+            this.cancelando = false;
+          }
         },
 
         rotuloStatus(s) {

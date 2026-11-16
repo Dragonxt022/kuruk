@@ -129,6 +129,10 @@
     "description": "Testes: importação de NF-e (XML modelo 55) para compras/estoque",
     "run": "node scripts/test-isolated.js src/tests/nfe-import.ts"
   },
+  "test:fiscal-emissao": {
+    "description": "Testes: emissão simulada de NFC-e (certificado, XML, autorização e cancelamento)",
+    "run": "node scripts/test-isolated.js src/tests/fiscal-emissao.ts"
+  },
   "test:telemetry": {
     "description": "Testes: telemetria anônima (erros + inventário de hardware)",
     "run": "node scripts/test-isolated.js src/tests/telemetry.ts"

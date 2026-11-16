@@ -17,9 +17,11 @@ import {
   type EmpresaFiscal,
   type FiscalConfig,
 } from '../services/config';
-import { currentCertificate, removeCertificate, storeCertificate } from '../services/certificate';
+import { currentCertificate, generateTestCertificate, removeCertificate, storeCertificate } from '../services/certificate';
 import { checkReadiness } from '../services/readiness';
 import { listMunicipios } from '../services/municipios';
+import { cancelDocument, emitSaleDocument } from '../services/emission';
+import { dataRoot } from '../services/paths';
 import { fiscalDocumentRepository, fiscalSequenceRepository } from '../repositories/FiscalDocumentRepository';
 
 /** Certificado A1 típico tem entre 2 KB e 20 KB; 1 MB já é folga enorme e evita que um
@@ -45,15 +47,9 @@ function documentFilters(req: Request): { whereSql: string; params: unknown[]; f
   return { whereSql: conditions.join(' AND '), params, from, to, status };
 }
 
-/** Raiz de dados (onde vive `storage/`), ao lado do banco. */
-function dataRoot(): string {
-  const dbPath = process.env.KURUK_DB_PATH ?? path.resolve(process.cwd(), 'database', 'kuruk.db');
-  return path.dirname(path.dirname(dbPath));
-}
-
 const DOC_SELECT = `SELECT d.id, d.model, d.serie, d.number, d.environment, d.key, d.status, d.sale_id,
          d.total_cents, d.protocol, d.cstat, d.motive, d.emitted_at, d.authorized_at, d.canceled_at,
-         d.is_test, d.xml_path`;
+         d.is_test, d.xml_path, d.cancel_protocol, d.cancel_cstat, d.cancel_motive, d.cancel_xml_path`;
 
 const ENV_LABEL: Record<number, string> = { 1: 'Produção', 2: 'Homologação' };
 
@@ -138,6 +134,33 @@ export const fiscalController = {
     res.json({ ok: true, readiness: checkReadiness() });
   },
 
+  /**
+   * Instala um A1 autoassinado para o modo simulado.
+   *
+   * É o atalho para testar o fluxo inteiro sem um certificado real. Só roda em homologação
+   * e só quando não há certificado instalado — trocar um A1 de verdade por um de teste sem
+   * avisar seria perigoso.
+   */
+  generateTestCertificate(req: Request, res: Response): void {
+    if (getConfig().ambiente === 1) {
+      return fail(res, 'Gere o certificado de teste em homologação. Volte o ambiente antes.');
+    }
+    if (currentCertificate()) {
+      return fail(res, 'Já existe um certificado instalado. Remova-o antes de gerar um certificado de teste.');
+    }
+
+    const generated = generateTestCertificate(getEmpresa().cnpj);
+    const result = storeCertificate(generated.pfx, generated.password);
+    if (!result.ok) return fail(res, result.error);
+
+    audit(req, 'editar', 'fiscal_certificado', result.info.titular, null, {
+      titular: result.info.titular,
+      validoAte: result.info.validoAte,
+      simulado: true,
+    });
+    res.json({ ok: true, certificado: result.info, readiness: checkReadiness() });
+  },
+
   /** Grava CSC e token. Recebe e descarta — nada disso volta em nenhuma resposta. */
   saveCredentials(req: Request, res: Response): void {
     const { csc, idCsc, provider, token } = (req.body ?? {}) as Record<string, string | undefined>;
@@ -177,6 +200,74 @@ export const fiscalController = {
     if (!result.ok) return fail(res, result.error);
     audit(req, 'editar', 'fiscal_ambiente', 'ambiente', { ambiente: 2 }, { ambiente: 1 });
     res.json({ ok: true, config: getConfig(), readiness: checkReadiness() });
+  },
+
+  /** Emite a NFC-e de uma venda pelo emissor simulado (homologação). */
+  emitDocument(req: Request, res: Response): void {
+    const { saleId, simularRejeicao } = (req.body ?? {}) as { saleId?: number; simularRejeicao?: boolean };
+    const result = emitSaleDocument(Number(saleId), { forceReject: simularRejeicao === true });
+
+    if (!result.ok) {
+      if (result.document) {
+        audit(req, 'emitir', 'fiscal_document', result.document.id, null, {
+          saleId, status: result.document.status, motivo: result.error,
+        });
+      }
+      res.status(result.status ?? 400).json({ error: result.error });
+      return;
+    }
+
+    audit(req, 'emitir', 'fiscal_document', result.document.id, null, {
+      saleId,
+      key: result.document.key,
+      status: result.document.status,
+      simulado: true,
+    });
+    res.status(201).json({ ok: true, documento: result.document });
+  },
+
+  /** Cancela uma nota autorizada, com evento assinado e XML próprio. */
+  cancelDocument(req: Request, res: Response): void {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return fail(res, 'Documento inválido.');
+    const { motivo } = (req.body ?? {}) as { motivo?: string };
+
+    const result = cancelDocument(id, String(motivo ?? ''));
+    if (!result.ok) {
+      res.status(result.status ?? 400).json({ error: result.error });
+      return;
+    }
+
+    audit(req, 'cancelar', 'fiscal_document', result.document.id, null, {
+      key: result.document.key,
+      motivo,
+      protocolo: result.document.cancel_protocol,
+    });
+    res.json({ ok: true, documento: result.document });
+  },
+
+  /**
+   * Vendas concluídas que ainda podem receber nota.
+   *
+   * A tela de notas usa esta lista no seletor de emissão: sem ela o lojista teria de
+   * decorar o número da venda e digitar em um campo livre.
+   */
+  listAvailableSales(_req: Request, res: Response): void {
+    const rows = fiscalDocumentRepository.raw(
+      `SELECT s.id, s.total_cents, s.created_at,
+              COALESCE(s.customer_name, c.name) AS customer
+         FROM sales s
+         LEFT JOIN customers c ON c.id = s.customer_id
+        WHERE s.deleted_at IS NULL AND s.status = 'concluida'
+          AND NOT EXISTS (
+            SELECT 1 FROM fiscal_documents d
+             WHERE d.sale_id = s.id AND d.deleted_at IS NULL
+               AND d.status IN ('pendente', 'enviando', 'autorizada', 'contingencia')
+          )
+        ORDER BY s.id DESC
+        LIMIT 30`,
+    );
+    res.json(rows);
   },
 
   /** Lista as notas emitidas, com filtro de período (autorização/emissão) e status. */
@@ -232,22 +323,33 @@ export const fiscalController = {
     res.send(csv);
   },
 
-  /** Baixa o XML autorizado do documento (quando o emissor já tiver gravado o arquivo). */
+  /** Baixa o XML autorizado do documento (ou o XML do evento de cancelamento). */
   downloadDocumentXml(req: Request, res: Response): void {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return fail(res, 'Documento inválido.');
+    const cancelamento = String(req.query.tipo ?? '') === 'cancelamento';
     const doc = fiscalDocumentRepository.findById(id) as
-      { id: number; key: string | null; xml_path: string | null } | undefined;
+      | { id: number; key: string | null; xml_path: string | null; cancel_xml_path: string | null }
+      | undefined;
     if (!doc) return fail(res, 'Documento não encontrado.', 404);
-    if (!doc.xml_path) {
-      return fail(res, 'O XML ainda não está disponível: a emissão fiscal ainda não foi implementada.', 404);
+
+    const storedPath = cancelamento ? doc.cancel_xml_path : doc.xml_path;
+    if (!storedPath) {
+      return fail(
+        res,
+        cancelamento
+          ? 'Esta nota ainda não possui XML de cancelamento.'
+          : 'O XML da nota ainda não está disponível.',
+        404,
+      );
     }
-    const full = path.isAbsolute(doc.xml_path) ? doc.xml_path : path.join(dataRoot(), doc.xml_path);
+    const full = path.isAbsolute(storedPath) ? storedPath : path.join(dataRoot(), storedPath);
     if (!fs.existsSync(full)) {
       return fail(res, 'O arquivo XML não está disponível neste computador.', 404);
     }
-    const filename = doc.key ? `nfe-${doc.key}.xml` : `documento-fiscal-${id}.xml`;
-    audit(req, 'exportar', 'fiscal_document', id, null, { key: doc.key });
+    const suffix = cancelamento ? '-cancelamento' : '';
+    const filename = doc.key ? `nfe-${doc.key}${suffix}.xml` : `documento-fiscal-${id}${suffix}.xml`;
+    audit(req, 'exportar', 'fiscal_document', id, null, { key: doc.key, cancelamento });
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(fs.readFileSync(full));

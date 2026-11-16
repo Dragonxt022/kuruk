@@ -677,6 +677,21 @@ export const uploadCertificateSchema = z.object({
   senha: z.string().min(1, 'Informe a senha do certificado.'),
 });
 
+/** Emissão de NFC-e a partir de uma venda do PDV. */
+export const emitFiscalDocumentSchema = z.object({
+  saleId: z.number().int().positive('Informe a venda que vai receber a nota.'),
+  // Gancho exclusivo do emissor simulado: força a rejeição para testar a tela de erro.
+  simularRejeicao: z.boolean().optional(),
+});
+
+/** Cancelamento: a SEFAZ exige justificativa de 15 a 255 caracteres. */
+export const cancelFiscalDocumentSchema = z.object({
+  motivo: z
+    .string()
+    .min(15, 'Informe o motivo com pelo menos 15 caracteres.')
+    .max(255, 'O motivo pode ter no máximo 255 caracteres.'),
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Configurações (chave/valor)
 // ─────────────────────────────────────────────────────────────────────────────

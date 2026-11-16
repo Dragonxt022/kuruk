@@ -7,7 +7,7 @@
  */
 import { getSqlite } from '../../../core/database/connection';
 import { validateCNPJ } from '../../../shared/documents';
-import { getConfig, getEmpresa, hasCsc, hasProviderToken } from './config';
+import { getConfig, getEmpresa, hasCsc, SIMULATED_PROVIDER } from './config';
 import { currentCertificate } from './certificate';
 
 /** Abaixo disso, avisar que o certificado está perto de vencer. */
@@ -30,6 +30,8 @@ export interface Readiness {
   /** Nenhum `fail` — dá para tentar emitir. `warn` não bloqueia. */
   ready: boolean;
   ambiente: 1 | 2;
+  /** Emissor simulado: nada é transmitido à SEFAZ e o CSC de teste pode ser usado. */
+  simulado: boolean;
   podeAtivarProducao: boolean;
   checks: ReadinessCheck[];
   produtosSemNcm: number;
@@ -132,24 +134,31 @@ export function checkReadiness(): Readiness {
   }
 
   // 3. Credenciais
+  const simulado = cfg.provider === SIMULATED_PROVIDER;
   const semCsc = !hasCsc() || !cfg.idCsc;
   checks.push({
     id: 'csc',
     label: 'CSC (código de segurança do contribuinte)',
-    status: semCsc ? 'fail' : 'ok',
+    status: semCsc && !simulado ? 'fail' : semCsc ? 'warn' : 'ok',
     detail: semCsc
-      ? 'Falta o CSC e/ou o ID do CSC. São gerados no portal da SEFAZ do seu estado e servem para montar o QR Code da nota.'
+      ? simulado
+        ? 'Emissor simulado: o QR Code usa um CSC de teste. Nada é transmitido à SEFAZ.'
+        : 'Falta o CSC e/ou o ID do CSC. São gerados no portal da SEFAZ do seu estado e servem para montar o QR Code da nota.'
       : `Configurado (ID ${cfg.idCsc}).`,
-    actionLabel: semCsc ? 'Configurar' : undefined,
+    actionLabel: semCsc && !simulado ? 'Configurar' : undefined,
     step: 3,
   });
 
-  const semEmissor = !cfg.provider || !hasProviderToken();
+  const semEmissor = !cfg.provider || !simulado;
   checks.push({
     id: 'emissor',
     label: 'Emissor',
-    status: semEmissor ? 'fail' : 'ok',
-    detail: semEmissor ? 'Falta escolher o emissor e informar o token de acesso.' : `${cfg.provider} configurado.`,
+    status: semEmissor ? 'fail' : 'warn',
+    detail: semEmissor
+      ? cfg.provider
+        ? `O emissor "${cfg.provider}" ainda não está integrado. Use o emissor simulado para testar o fluxo nesta versão.`
+        : 'Falta escolher o emissor. Para testar o fluxo, use o emissor simulado.'
+      : 'Emissor simulado — nenhuma nota é transmitida à SEFAZ. Use apenas em homologação.',
     actionLabel: semEmissor ? 'Configurar' : undefined,
     step: 3,
   });
@@ -182,6 +191,7 @@ export function checkReadiness(): Readiness {
   return {
     ready,
     ambiente: cfg.ambiente,
+    simulado,
     podeAtivarProducao: ready && !!cfg.testeOkEm,
     checks,
     produtosSemNcm: missing,

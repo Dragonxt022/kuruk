@@ -10,14 +10,27 @@ export interface FiscalDocumentRow extends Row {
   key: string | null;
   status: string;
   sale_id: number | null;
+  customer_id: number | null;
+  cpf_dest: string | null;
   is_test: number;
+  tp_emis: number;
   total_cents: number;
   protocol: string | null;
   cstat: number | null;
   motive: string | null;
+  qr_code: string | null;
+  xml_path: string | null;
+  xml_hash: string | null;
+  provider: string | null;
+  provider_ref: string | null;
   attempts: number;
   emitted_at: string;
   authorized_at: string | null;
+  canceled_at: string | null;
+  cancel_protocol: string | null;
+  cancel_cstat: number | null;
+  cancel_motive: string | null;
+  cancel_xml_path: string | null;
 }
 
 export class FiscalDocumentRepository extends BaseRepository<FiscalDocumentRow> {

@@ -90,6 +90,7 @@ function listCommands() {
       'test:producao',
       'test:foodservice',
       'test:comandas',
+      'test:fiscal-emissao',
       'test:comanda-qty',
       'test:odonto-patients',
       'test:odonto-anamnese',

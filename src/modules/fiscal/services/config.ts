@@ -12,6 +12,15 @@ export const SECRET_CSC = 'fiscal.csc';
 export const SECRET_CERT_PASSWORD = 'fiscal.cert_senha';
 export const SECRET_PROVIDER_TOKEN = 'fiscal.provider_token';
 
+/**
+ * Emissor de mentira, usado para montar e testar o fluxo inteiro sem SEFAZ.
+ *
+ * O nome é escolhido na configuração, mas o código só implementa este. Deixar a constante
+ * aqui evita que a UI, o diagnóstico e o serviço de emissão usem grafias diferentes da
+ * mesma palavra e o lojista fique com "simulado" na tela e "Simulado" no emissor.
+ */
+export const SIMULATED_PROVIDER = 'simulado';
+
 /** 1 = Simples Nacional, 2 = Simples excesso de sublimite, 3 = Regime Normal. */
 export type Crt = 1 | 2 | 3;
 /** 1 = produção, 2 = homologação. */

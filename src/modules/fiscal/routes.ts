@@ -7,6 +7,8 @@ import {
   saveFiscalEmpresaSchema,
   saveFiscalCredentialsSchema,
   uploadCertificateSchema,
+  emitFiscalDocumentSchema,
+  cancelFiscalDocumentSchema,
 } from '../../shared/schemas';
 import { fiscalController } from './controllers/FiscalController';
 
@@ -30,13 +32,17 @@ router.put('/empresa', requirePermission('fiscal.config.edit'), validateBody(sav
 router.put('/credenciais', requirePermission('fiscal.config.edit'), validateBody(saveFiscalCredentialsSchema), fiscalController.saveCredentials);
 router.put('/ambiente', requirePermission('fiscal.config.edit'), fiscalController.setEnvironment);
 router.post('/certificado', requirePermission('fiscal.config.edit'), validateBody(uploadCertificateSchema), fiscalController.uploadCertificate);
+router.post('/certificado/teste', requirePermission('fiscal.config.edit'), fiscalController.generateTestCertificate);
 router.delete('/certificado', requirePermission('fiscal.config.edit'), fiscalController.removeCertificate);
 
 // Documentos
 router.get('/documentos', requirePermission('fiscal.documents.view'), fiscalController.listDocuments);
 router.get('/documentos/resumo', requirePermission('fiscal.documents.view'), fiscalController.documentsSummary);
 router.get('/documentos/export.csv', requirePermission('fiscal.documents.view'), fiscalController.exportDocuments);
+router.get('/documentos/vendas-disponiveis', requirePermission('fiscal.documents.view'), fiscalController.listAvailableSales);
 router.get('/documentos/venda/:saleId', requirePermission('fiscal.documents.view'), fiscalController.getBySale);
+router.post('/documentos/emitir', requirePermission('fiscal.emit'), validateBody(emitFiscalDocumentSchema), fiscalController.emitDocument);
+router.post('/documentos/:id/cancelar', requirePermission('fiscal.cancel'), validateBody(cancelFiscalDocumentSchema), fiscalController.cancelDocument);
 router.get('/documentos/:id/xml', requirePermission('fiscal.documents.view'), fiscalController.downloadDocumentXml);
 
 export default router;

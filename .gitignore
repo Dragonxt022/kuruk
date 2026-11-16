@@ -19,6 +19,8 @@ uploads/
 .env
 # Certificados HTTPS próprios (ficam só na máquina, nunca no git)
 certificados/
+# Certificado A1 de teste da emissão fiscal (o .pfx carrega chave privada)
+doc/certificado/
 
 # Coverage
 coverage/

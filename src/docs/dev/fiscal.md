@@ -55,6 +55,54 @@ complementos, kits e componentes. A tela `/app/fiscal/produtos` permite preenche
 - **Cancelar a venda com nota viva é bloqueado** — o lojista cancela a nota primeiro
   (`hasLiveDocument`). Sem isso, sobraria uma NFC-e autorizada apontando para venda inexistente.
 
+### Emissor simulado (homologação)
+
+Enquanto não há integração com um emissor real, o provider `simulado` fecha o fluxo de
+ponta a ponta sem tocar na SEFAZ:
+
+1. `POST /api/fiscal/certificado/teste` gera um A1 autoassinado (titular `KURUK TESTE`) e
+   grava a senha no cofre. É o mesmo caminho de `storeCertificate` do upload manual, então
+   serve para testar leitura, validade e assinatura.
+2. `PUT /api/fiscal/credenciais` grava `provider: "simulado"`. CSC e token não são exigidos;
+   o QR Code usa um CSC de teste e o diagnóstico mostra os dois checks como `warn`.
+3. `POST /api/fiscal/documentos/emitir` com `{ saleId }` reserva o próximo número, monta o
+   XML 4.00, assina `infNFe` com RSA-SHA1, gera a chave de 44 dígitos e recebe do simulador
+   `cStat 100` + protocolo. O XML autorizado vai para `storage/fiscal/AAAA/MM/<chave>.xml`.
+4. `POST /api/fiscal/documentos/:id/cancelar` com `{ motivo }` gera o evento `110111`,
+   assina e arquiva o XML de cancelamento.
+5. `GET /api/fiscal/documentos/:id/xml` baixa o `nfeProc`; `?tipo=cancelamento` baixa o
+   `procEventoNFe`.
+
+O simulado **não emite em produção** (`ambiente 1`): o serviço recusa antes de reservar
+número. A tela de notas mostra as vendas concluídas sem documento em
+`GET /api/fiscal/documentos/vendas-disponiveis`, para não exigir que o lojista decore o
+número da venda.
+
+Para testar o fluxo inteiro pela linha de comando:
+
+```bash
+node scripts/kuruk test:fiscal-emissao
+```
+
+O teste cobre empresa, certificado de teste, diagnóstico, venda, emissão, digest/assinatura,
+download do XML, rejeição simulada, nova tentativa, cancelamento e a trava de produção.
+
+Para exercitar um `.pfx` real (ou o simulado de `doc/certificado`, quando você tiver a
+senha) em vez do certificado gerado, informe o arquivo e a senha:
+
+```bash
+# PowerShell
+$env:KURUK_TEST_CERT_PFX='doc/certificado/kuruk-teste.pfx'
+$env:KURUK_TEST_CERT_PASSWORD='a-senha-do-arquivo'
+node scripts/kuruk test:fiscal-emissao
+```
+
+### Certificado de teste x certificado real
+
+O `.pfx` simulado pode ser enviado pela tela normal (`POST /api/fiscal/certificado`) quando
+o lojista tem a senha. O botão **Gerar certificado de teste** é só um atalho para uma
+instalação limpa; o certificado da empresa continua sendo obrigatório para emissão real.
+
 ## Sincronização
 
 `fiscal_documents` **não** sincroniza: documento fiscal é arquivo do contribuinte naquela

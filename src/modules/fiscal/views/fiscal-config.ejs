@@ -116,15 +116,15 @@
       <section class="panel">
         <h2>Emissão de teste</h2>
         <p class="hint mt-0">
-          Emite uma nota real em homologação para confirmar que certificado, CSC e emissor
-          estão conversando. É o que destrava a produção.
+          O emissor <strong>simulado</strong> assina a nota com o certificado instalado e devolve
+          um protocolo de homologação. Nada é enviado à SEFAZ e a nota não tem valor fiscal.
         </p>
         <div class="toolbar">
-          <button class="btn" disabled title="Disponível quando o emissor estiver conectado (próxima etapa do módulo).">
+          <a class="btn" href="/app/fiscal/notas">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             Emitir nota de teste
-          </button>
-          <span class="muted">A conexão com o emissor entra na próxima etapa do módulo.</span>
+          </a>
+          <span class="muted">Escolha uma venda na tela de notas. O fluxo inteiro é simulado.</span>
         </div>
       </section>
 
@@ -307,7 +307,14 @@
                   <button class="btn" :disabled="!certBase64 || !certSenha || saving" @click="enviarCertificado()">
                     <span x-text="saving ? 'Verificando…' : 'Enviar e verificar'"></span>
                   </button>
+                  <button class="btn secondary" :disabled="saving || gerandoCert" @click="gerarCertificadoTeste()">
+                    <span x-text="gerandoCert ? 'Gerando…' : 'Gerar certificado de teste'"></span>
+                  </button>
                 </div>
+                <p class="hint">
+                  O certificado de teste é autoassinado e só vale para homologação simulada.
+                  Para emitir de verdade, use o A1 da sua empresa.
+                </p>
                 <p class="error" x-text="certErro"></p>
               </div>
             </template>
@@ -349,13 +356,16 @@
 
             <div class="field">
               <label>Emissor</label>
-              <input class="input" type="text" x-model="provider" placeholder="Nome do serviço emissor">
-              <p class="hint">Quem assina e transmite a nota para a SEFAZ.</p>
+              <input class="input" type="text" x-model="provider" placeholder="simulado">
+              <p class="hint">
+                Para testar o fluxo sem SEFAZ, use <strong>simulado</strong>.
+                <button type="button" class="help-toggle" @click="provider = 'simulado'">Usar simulado</button>
+              </p>
             </div>
             <div class="field">
               <label>Token de acesso do emissor</label>
               <input class="input" type="password" x-model="token" autocomplete="off"
-                     :placeholder="temToken ? 'Já configurado — preencha só para trocar' : 'Cole o token da sua conta'">
+                     :placeholder="temToken ? 'Já configurado — preencha só para trocar' : 'Não é necessário no emissor simulado'">
             </div>
             <div class="toolbar">
               <button class="btn" :disabled="saving" @click="salvarCredenciais()">
@@ -507,6 +517,7 @@
         certArquivoNome: '',
         certSenha: '',
         certErro: '',
+        gerandoCert: false,
 
         csc: '',
         idCsc: '',
@@ -653,6 +664,22 @@
           if (!r.ok) { window.showToast('Não foi possível remover o certificado.', 'error'); return; }
           this.aplicar(await r.json());
           this.certificado = null;
+        },
+
+        async gerarCertificadoTeste() {
+          const ok = await window.confirmDlg(
+            'Gerar um certificado A1 de TESTE, autoassinado, para homologação simulada? ' +
+            'Ele não tem validade fiscal e substitui a necessidade do certificado da empresa enquanto você testa.'
+          );
+          if (!ok) return;
+          this.certErro = '';
+          this.gerandoCert = true;
+          const r = await fetch('/api/fiscal/certificado/teste', { method: 'POST' });
+          const body = await r.json().catch(() => ({}));
+          this.gerandoCert = false;
+          if (!r.ok) { this.certErro = body.error || 'Não foi possível gerar o certificado de teste.'; return; }
+          this.aplicar(body);
+          window.showToast('Certificado de teste instalado.', 'success');
         },
 
         async salvarCredenciais() {
