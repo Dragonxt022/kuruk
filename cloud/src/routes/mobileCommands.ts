@@ -143,6 +143,23 @@ desktopSide.post('/:id/ack', requireCompanyAuth, async (req: AuthedRequest, res)
       WHERE id = ? AND company_uuid = ? AND status = 'pendente'`,
     [status, JSON.stringify(result ?? {}), req.params.id, req.companyUuid],
   );
+  /**
+   * O pedido público (QR da mesa) precisa refletir o mesmo desfecho.
+   *
+   * Sem isto, um pedido que o desktop recusou (ex.: "a mesa não está aberta") continuava
+   * `recebido` aqui para sempre: o celular mostrava "aguardando o atendente" e a contagem
+   * de `MAX_PENDING_PER_TABLE` o tratava como fila ativa, bloqueando a mesa por 30 min
+   * depois de duas tentativas que nunca chegaram a existir no salão.
+   *
+   * `status IN (...)` protege os desfechos finais: se o garçom já confirmou/recusou a
+   * rodada, um ack atrasado não pode regredir o status.
+   */
+  await getPool().query(
+    `UPDATE public_orders SET status = ?
+      WHERE company_uuid = ? AND command_id = ?
+        AND status IN ('recebido','aplicado','erro')`,
+    [status === 'erro' ? 'erro' : 'aplicado', req.companyUuid, req.params.id],
+  );
   // Avisa o celular que está na tela de status esperando.
   emitToCompany(req.companyUuid!, 'command-done', { id: Number(req.params.id), status });
   res.json({ ok: true });

@@ -151,13 +151,19 @@ export function notifyOrder(
     serviceType?: KitchenServiceType;
     items: NotifyOrderItem[];
   },
-): { items: number; maxEstimatedMinutes: number | null } {
+): { items: number; maxEstimatedMinutes: number | null; unrouted: { name: string; qty: number }[] } {
   const routingRows = kitchenRoutingRepository.findAllActive() as
     { product_id: number; station: string | null; estimated_minutes: number | null }[];
-  if (!routingRows.length) return { items: 0, maxEstimatedMinutes: null };
   const routing = new Map(routingRows.map((r) => [r.product_id, r]));
+  // Produto fora do roteamento NÃO é produzido — mas quem mandou o pedido precisa saber
+  // que ele ficou de fora. Antes era silencioso: a cozinha recebia o pedido "faltando" e
+  // o garçom via "enviado com sucesso", sem pista de que o item nunca foi produzido.
+  const unrouted = params.items
+    .filter((i) => !routing.has(i.productId))
+    .map((i) => ({ name: i.name, qty: i.qty }));
+  if (!routingRows.length) return { items: 0, maxEstimatedMinutes: null, unrouted };
   const matched = params.items.filter((i) => routing.has(i.productId));
-  if (!matched.length) return { items: 0, maxEstimatedMinutes: null };
+  if (!matched.length) return { items: 0, maxEstimatedMinutes: null, unrouted };
   const maxEstimate = Math.max(0, ...matched.map((i) => routing.get(i.productId)?.estimated_minutes ?? 0));
   const ticketUuid = randomUUID();
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -198,7 +204,7 @@ export function notifyOrder(
       sourceType: params.sourceType, sourceId: params.sourceId, items: matched.map((i) => ({ productId: i.productId, name: i.name, qty: i.qty })),
     });
   });
-  return { items: matched.length, maxEstimatedMinutes: maxEstimate > 0 ? maxEstimate : null };
+  return { items: matched.length, maxEstimatedMinutes: maxEstimate > 0 ? maxEstimate : null, unrouted };
 }
 
 /**

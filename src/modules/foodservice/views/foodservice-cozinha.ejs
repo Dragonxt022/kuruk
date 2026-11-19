@@ -60,6 +60,16 @@
       </div>
     </div>
 
+    <%# A tela é o único canal de chegada do pedido: se ela perde o caixa, a cozinha
+        precisa SABER, não continuar mostrando a última foto como se estivesse em dia. %>
+    <div class="kds-offline" x-show="offline" x-cloak role="alert">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 14 0"/><path d="M1.9 8.9a15 15 0 0 1 20.2 0"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      <span>
+        <strong>Sem conexão com o caixa.</strong>
+        Novos pedidos podem não aparecer — este painel tenta de novo a cada 5 s.
+      </span>
+    </div>
+
     <%# Barra do alarme: mostra quantos pedidos ainda não foram confirmados e oferece
         um único "Confirmar todos". Fica visível mesmo com os cartões rolados, então a
         cozinha sempre tem como parar o som. %>
@@ -603,6 +613,19 @@
     }
     .kds-alarme-bar-hint { color: var(--text-muted); font-size: .76rem; }
     .kds-alarme-confirmar { margin-left: auto; flex: none; }
+
+    /* ─── Sem conexão com o caixa ───
+       O painel é o único canal de chegada do pedido. Quando o fetch falha é preciso
+       dizer isso na cara de quem está na cozinha, não deixar a tela "congelada" no
+       último estado bom fingindo que está tudo em dia. */
+    .kds-offline {
+      display: flex; align-items: center; gap: .55rem;
+      margin: .15rem 0 .7rem; padding: .5rem .8rem;
+      border: 1.5px solid var(--danger); border-radius: var(--radius);
+      background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+      color: var(--danger); font-size: .84rem; font-weight: 600;
+    }
+    .kds-offline svg { flex: none; }
     .kds-card-ack {
       display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
       padding: .45rem .75rem; font-size: .76rem; font-weight: 700;
@@ -856,6 +879,11 @@
         previewAudio: null,
         knownIds: null,
         knownStatuses: null,
+        // Conexão com o caixa: o `load()` mantém isto em dia. `offlineDesde` serve só
+        // para o aviso de reconexão dizer há quanto tempo a cozinha ficou cega.
+        offline: false,
+        offlineDesde: null,
+        loading: false,
         // Tela acesa enquanto o painel estiver aberto. O lock/vídeo é do partial
         // /js/keep-awake.js (incluído pelo nav neste painel); aqui só refletimos o estado
         // no botão. Ligado por padrão — a tela apagando, o som do pedido novo para.
@@ -953,58 +981,109 @@
           return { label, numero, texto };
         },
         async load() {
-          const r = await fetch('/api/foodservice/kitchen/tickets');
-          if (!r.ok) return;
-          const raw = await r.json();
-          const all = Array.isArray(raw) ? raw : (raw.data ?? []);
-          const visiveis = all.filter((t) => t.status !== 'cancelado');
-          const ids = new Set(visiveis.map((t) => t.id));
-          const novos = this.knownIds ? [...ids].filter((id) => !this.knownIds.has(id)) : [];
+          // Um poll a cada 5 s não pode empilhar: se o caixa estiver lento, a requisição
+          // anterior ainda está aberta e abrir outra só piora a fila.
+          if (this.loading) return;
+          this.loading = true;
+          try {
+            // Timeout próprio: `fetch` sem timeout fica pendurado quando o Wi-Fi do
+            // restaurante cai pela metade, e o loop de 5 s nunca mais conclui.
+            const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+            const timeoutId = ctrl ? setTimeout(() => ctrl.abort(), 10000) : null;
+            let r;
+            try {
+              r = await fetch('/api/foodservice/kitchen/tickets', ctrl ? { signal: ctrl.signal } : undefined);
+            } finally {
+              if (timeoutId) clearTimeout(timeoutId);
+            }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const raw = await r.json();
+            const all = Array.isArray(raw) ? raw : (raw.data ?? []);
+            this.marcarOffline(false);
+            const visiveis = all.filter((t) => t.status !== 'cancelado');
+            const ids = new Set(visiveis.map((t) => t.id));
+            const novos = this.knownIds ? [...ids].filter((id) => !this.knownIds.has(id)) : [];
 
-          // Cancelamento: o ticket some da tela (status 'cancelado'), mas antes disso a
-          // cozinha precisa saber. A primeira carga é baseline — não toca para pedidos
-          // que já estavam cancelados quando a tela abriu.
-          const antes = this.knownStatuses;
-          const cancelados = antes
-            ? all.filter((t) => t.status === 'cancelado' && antes.has(t.id) && antes.get(t.id) !== 'cancelado')
-            : [];
-          this.knownStatuses = new Map(all.map((t) => [t.id, t.status]));
+            // Cancelamento: o ticket some da tela (status 'cancelado'), mas antes disso a
+            // cozinha precisa saber. A primeira carga é baseline — não toca para pedidos
+            // que já estavam cancelados quando a tela abriu.
+            const antes = this.knownStatuses;
+            const cancelados = antes
+              ? all.filter((t) => t.status === 'cancelado' && antes.has(t.id) && antes.get(t.id) !== 'cancelado')
+              : [];
+            this.knownStatuses = new Map(all.map((t) => [t.id, t.status]));
 
-          // O alarme contínuo substitui o "toca uma vez" — e UM loop cobre todos os
-          // pedidos: se dois chegam juntos, ninguém dispara dois áudios ao mesmo tempo.
-          if (novos.length && this.somAtivo && !this.alarmeAtivo) this.playSom();
-          if (cancelados.length) {
-            if (this.somCancelAtivo) this.playSomCancel();
-            const labels = cancelados.map((t) => this.ticketLabel(t)).join(', ');
-            showToast('Pedido cancelado: ' + labels + '.', 'error');
-            if (document.hidden && window.KurukReadyAlerts && window.KurukReadyAlerts.notify) {
+            // O alarme contínuo substitui o "toca uma vez" — e UM loop cobre todos os
+            // pedidos: se dois chegam juntos, ninguém dispara dois áudios ao mesmo tempo.
+            if (novos.length && this.somAtivo && !this.alarmeAtivo) this.playSom();
+            if (cancelados.length) {
+              if (this.somCancelAtivo) this.playSomCancel();
+              const labels = cancelados.map((t) => this.ticketLabel(t)).join(', ');
+              showToast('Pedido cancelado: ' + labels + '.', 'error');
+              if (document.hidden && window.KurukReadyAlerts && window.KurukReadyAlerts.notify) {
+                window.KurukReadyAlerts.notify(
+                  'Pedido cancelado na cozinha',
+                  labels + ' — toque para abrir.',
+                  '/app/foodservice/cozinha',
+                  'kuruk-cancel-' + cancelados[0].id,
+                );
+              }
+            }
+
+            // Com a tela apagada ou a aba escondida, o som pode não tocar: o aviso do
+            // sistema (quando o navegador permite) garante que o pedido não passe batido.
+            if (novos.length && document.hidden && window.KurukReadyAlerts && window.KurukReadyAlerts.notify) {
+              const t = visiveis.find((x) => x.id === novos[0]);
+              const label = t ? this.ticketLabel(t) : 'Novo pedido';
               window.KurukReadyAlerts.notify(
-                'Pedido cancelado na cozinha',
-                labels + ' — toque para abrir.',
+                'Novo pedido na cozinha',
+                label + ' — toque para abrir.',
                 '/app/foodservice/cozinha',
-                'kuruk-cancel-' + cancelados[0].id,
+                'kuruk-kitchen-' + novos[0],
               );
             }
+            this.knownIds = ids;
+            this.tickets = visiveis;
+            // Depois de atualizar a lista: liga/desliga/retoma o loop conforme haja
+            // pedido sem confirmação. Também serve de retry quando o navegador bloqueou
+            // o áudio antes do primeiro toque na tela.
+            this.syncAlarme();
+          } catch (e) {
+            // Sem este catch a falha virava "unhandled rejection" (os erros de
+            // `Failed to fetch` no rastreamento) e a cozinha continuava achando que
+            // estava tudo em dia: o pedido chegava ao caixa e não aparecia ali.
+            this.marcarOffline(true, e);
+          } finally {
+            this.loading = false;
           }
-
-          // Com a tela apagada ou a aba escondida, o som pode não tocar: o aviso do
-          // sistema (quando o navegador permite) garante que o pedido não passe batido.
-          if (novos.length && document.hidden && window.KurukReadyAlerts && window.KurukReadyAlerts.notify) {
-            const t = visiveis.find((x) => x.id === novos[0]);
-            const label = t ? this.ticketLabel(t) : 'Novo pedido';
-            window.KurukReadyAlerts.notify(
-              'Novo pedido na cozinha',
-              label + ' — toque para abrir.',
-              '/app/foodservice/cozinha',
-              'kuruk-kitchen-' + novos[0],
+        },
+        /**
+         * Estado da conexão com o caixa. Avisa na transição (não a cada 5 s, senão o
+         * aviso vira ruído) e mantém os cartões como estavam: perder a conexão não pode
+         * apagar a fila da tela.
+         */
+        marcarOffline(offline, erro) {
+          const eraOffline = this.offline;
+          this.offline = offline;
+          if (offline) {
+            if (!this.offlineDesde) this.offlineDesde = Date.now();
+            if (!eraOffline) {
+              showToast(
+                'Sem conexão com o caixa' + (erro && erro.name === 'AbortError' ? ' (o caixa não respondeu em 10 s)' : '') +
+                '. Os pedidos podem não aparecer.',
+                'error',
+              );
+            }
+            return;
+          }
+          const ficouFora = this.offlineDesde ? Math.round((Date.now() - this.offlineDesde) / 1000) : 0;
+          this.offlineDesde = null;
+          if (eraOffline) {
+            showToast(
+              'Conexão com o caixa restabelecida' + (ficouFora > 30 ? ' após ' + Math.round(ficouFora / 60) + ' min' : '') + '.',
+              'success',
             );
           }
-          this.knownIds = ids;
-          this.tickets = visiveis;
-          // Depois de atualizar a lista: liga/desliga/retoma o loop conforme haja
-          // pedido sem confirmação. Também serve de retry quando o navegador bloqueou
-          // o áudio antes do primeiro toque na tela.
-          this.syncAlarme();
         },
         somLabel(file) {
           return (this.sons.find((s) => s.file === file) ?? this.sons[0]).label;

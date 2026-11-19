@@ -126,10 +126,13 @@ async function main(): Promise<void> {
     }],
   };
 
-  // Sem abrir a mesa, o link do QR não serve nem para quem está em casa: a presença é
-  // confirmada pelo atendente ao abrir a comanda. O QR impresso continua o mesmo.
+  // Sem abrir a mesa e com a exigência LIGADA, o link do QR não serve nem para quem está
+  // em casa: a presença é confirmada pelo atendente ao abrir a comanda. O QR impresso
+  // continua o mesmo. (O padrão de fábrica é desligado — ver o bloco "padrão de fábrica"
+  // mais abaixo; aqui testamos a opção explícita.)
+  settingsRepository.set('pedido_qr.exigir_mesa_aberta', '1');
   const semMesaAberta = receiveQrOrder(req, payload);
-  check('pedido QR em mesa livre é recusado (exige mesa aberta)', !semMesaAberta.ok,
+  check('pedido QR em mesa livre é recusado com a exigência ligada', !semMesaAberta.ok,
     semMesaAberta.ok ? '' : semMesaAberta.error);
 
   const opened = openComanda(req, { tableId });
@@ -179,6 +182,11 @@ async function main(): Promise<void> {
   check('garçom confirma a rodada', confirmed.ok, confirmed.ok ? '' : confirmed.error);
   if (confirmed.ok) {
     check('só o principal roteado vai para a cozinha', confirmed.sent === 1, `sent=${confirmed.sent}`);
+    // O adicional não tem roteamento próprio (vai como texto no principal): precisa ser
+    // reportado, senão a tela anuncia "confirmado" e a cozinha recebe o pedido faltando.
+    check('item sem roteamento é reportado, não engolido',
+      confirmed.unrouted.length === 1 && confirmed.unrouted[0].name === 'Bacon',
+      JSON.stringify(confirmed.unrouted));
   }
   const ticket = db.prepare(
     "SELECT id, service_type FROM kitchen_tickets WHERE status <> 'cancelado' ORDER BY id DESC LIMIT 1",
@@ -296,6 +304,20 @@ async function main(): Promise<void> {
   check('mesa livre com status defasado não responde "ocupada"',
     !comExigencia.ok && !/ocupada/i.test(comExigencia.error),
     comExigencia.ok ? 'aceitou' : comExigencia.error);
+
+  // ─── Padrão de fábrica: o QR abre a mesa sozinho ─────────────────────────────
+  // Foi o defeito que o cliente viu: as duas chaves vinham ligadas, então todo pedido
+  // de mesa ainda fechada era recusado no celular — sem ninguém no salão saber.
+  db.prepare("DELETE FROM settings WHERE key = 'pedido_qr.exigir_mesa_aberta'").run();
+  const mesaPadraoUuid = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  db.prepare("INSERT INTO store_tables (label, status, uuid) VALUES ('Mesa padrao', 'livre', ?)").run(mesaPadraoUuid);
+  const semConfiguracao = receiveQrOrder(req, {
+    orderUuid: 'dddddddd-1111-4111-8111-dddddddddddd',
+    tableUuid: mesaPadraoUuid,
+    items: [{ productUuid: UUID.main, qty: 1, takeaway: false }],
+  });
+  check('sem configuração salva, o pedido do QR abre a mesa',
+    semConfiguracao.ok, semConfiguracao.ok ? '' : semConfiguracao.error);
 
   // ─── Publicação do menu (Trial não tem sync; o QR usa esta rota) ────────────
   process.env.KURUK_SYNC_SERVER_URL = 'https://kuruk.exemplo.test';

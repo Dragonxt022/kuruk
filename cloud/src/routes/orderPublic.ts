@@ -344,15 +344,27 @@ orderApi.post('/:token/orders', async (req, res) => {
 
   const pool = getPool();
   const [existingRows] = await pool.query(
-    `SELECT order_uuid, status, total_cents FROM public_orders
-      WHERE company_uuid = ? AND client_request_id = ? LIMIT 1`,
+    `SELECT o.order_uuid, o.status, o.rejection_reason, o.total_cents,
+            o.command_id, c.status AS command_status
+       FROM public_orders o
+       LEFT JOIN company_commands c ON c.id = o.command_id
+      WHERE o.company_uuid = ? AND o.client_request_id = ? LIMIT 1`,
     [table.companyUuid, clientRequestId],
   );
-  const existing = (existingRows as { order_uuid: string; status: string; total_cents: number }[])[0];
+  const existing = (existingRows as {
+    order_uuid: string; status: string; rejection_reason: string | null;
+    total_cents: number; command_id: number | null; command_status: string | null;
+  }[])[0];
   if (existing) {
+    // O celular repete o mesmo `clientRequestId` em retry de rede. Devolver o pedido
+    // existente é o correto — mas o STATUS precisa ser o real: um pedido que o desktop
+    // recusou não pode voltar como "recebido", senão o cliente acha que está na fila e
+    // fica tentando para sempre.
+    const status = existing.command_status === 'erro' ? 'erro' : existing.status;
     res.status(200).json({
       orderUuid: existing.order_uuid,
-      status: existing.status,
+      status,
+      reason: existing.rejection_reason,
       totalCents: Number(existing.total_cents),
       desktopOnline: connectedCount(table.companyUuid) > 0,
     });
@@ -363,10 +375,19 @@ orderApi.post('/:token/orders', async (req, res) => {
   // bastam para um pedido normal (principal + "mais uma rodada"); a terceira espera a
   // confirmação/recusa das anteriores. É o freio que impede um link vazado de encher
   // a tela do atendente com pedidos falsos.
+  //
+  // Só conta pedido que o desktop ACEITOU: um pedido cujo comando terminou em erro
+  // (mesa fechada, produto saiu do cardápio) nunca existiu no salão e não pode ocupar
+  // a vaga — era isso que fazia a mesa receber "já existem pedidos aguardando" depois
+  // de duas tentativas frustradas.
   const [pendingRows] = await pool.query(
-    `SELECT COUNT(*) AS pending FROM public_orders
-      WHERE company_uuid = ? AND table_uuid = ? AND status = 'recebido'
-        AND created_at > (NOW(3) - INTERVAL 30 MINUTE)`,
+    `SELECT COUNT(*) AS pending FROM public_orders o
+      WHERE o.company_uuid = ? AND o.table_uuid = ? AND o.status = 'recebido'
+        AND o.created_at > (NOW(3) - INTERVAL 30 MINUTE)
+        AND NOT EXISTS (
+          SELECT 1 FROM company_commands c
+           WHERE c.id = o.command_id AND c.status = 'erro'
+        )`,
     [table.companyUuid, table.tableUuid],
   );
   const pending = Number((pendingRows as { pending: number }[])[0]?.pending ?? 0);

@@ -848,6 +848,20 @@
           return body;
         });
       }).then(function (body) {
+        // O servidor devolve o pedido QUE JÁ EXISTE quando o `clientRequestId` repete
+        // (retry de rede). Se aquele pedido terminou em erro/recusa, este envio não pode
+        // ser comemorado como novo: o carrinho fica na tela e a próxima tentativa precisa
+        // de um pedido novo — antes o cliente reenviava para sempre o mesmo pedido morto.
+        if (body.status === 'erro' || body.status === 'recusado') {
+          var morto = new Error(
+            body.reason ||
+              (body.status === 'erro'
+                ? 'Não foi possível enviar o pedido. Chame o atendente para abrir a mesa e tente de novo.'
+                : 'O pedido não foi confirmado pelo atendente.'),
+          );
+          morto.deadOrder = true;
+          throw morto;
+        }
         // Guarda no navegador ANTES de limpar o carrinho: é o "pedir novamente".
         // Uma falha do localStorage/histórico NUNCA pode fazer um pedido já aceito
         // parecer que falhou para o cliente.
@@ -895,6 +909,12 @@
           message = 'A loja demorou para responder. Verifique a internet e tente novamente.';
         } else if (!err.status && /fetch|network|load failed/i.test(message)) {
           message = 'Sem conexão com a loja. Verifique a internet e tente novamente.';
+        }
+        // Pedido já existente que morreu no desktop: o retry precisa de um
+        // `clientRequestId` novo, senão o servidor devolveria o mesmo pedido morto.
+        if (err && err.deadOrder) {
+          state.clientRequestId = uuid();
+          writeCartDraft();
         }
         // O aviso fica DENTRO da modal: um toast atrás do dialog o cliente não vê.
         showSendError(message, err.status === 409 || err.status === 404);

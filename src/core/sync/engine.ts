@@ -202,22 +202,126 @@ function placeholdersForExcluded(spec: RegisteredSyncTable): Record<string, unkn
   return values;
 }
 
-function insertNewRow(spec: RegisteredSyncTable, rec: IncomingRecord): number {
+// ---------------------------------------------------------------------------
+// Chave natural (mesma linha lógica, uuid diferente)
+// ---------------------------------------------------------------------------
+
+const uniqueIndexCache = new Map<string, string[][]>();
+
+/** Colunas de cada índice UNIQUE da tabela — inclusive o UNIQUE(key) criado pela migration. */
+function uniqueIndexKeys(table: string): string[][] {
+  const cached = uniqueIndexCache.get(table);
+  if (cached) return cached;
+  const indexes = db().prepare(`PRAGMA index_list(${table})`).all() as
+    { name: string; unique: number; partial: number }[];
+  const keys: string[][] = [];
+  for (const idx of indexes) {
+    if (!idx.unique || idx.partial) continue;
+    const cols = (db().prepare(`PRAGMA index_info(${idx.name})`).all() as { name: string | null }[])
+      .map((c) => c.name)
+      .filter((n): n is string => !!n);
+    if (cols.length) keys.push(cols);
+  }
+  uniqueIndexCache.set(table, keys);
+  return keys;
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  return e instanceof Error && /UNIQUE constraint failed/i.test(e.message);
+}
+
+/**
+ * Procura a linha local que já representa o MESMO registro lógico (chave natural igual),
+ * mesmo tendo outro uuid.
+ *
+ * A nuvem pode ter a mesma linha com outro uuid: `capabilities` é o caso real — instalações
+ * antigas geravam `randomUUID()` por máquina e versões novas derivam um uuid estável da
+ * chave, então a nuvem guardava um e o PC tinha outro. O motor casa por uuid, tentava
+ * INSERT e estourava o UNIQUE da chave natural.
+ */
+function findNaturalKeyConflict(
+  spec: RegisteredSyncTable,
+  values: Record<string, unknown>,
+  incomingUuid: string,
+): { localId: number } | null {
+  for (const columns of uniqueIndexKeys(spec.table)) {
+    const params: unknown[] = [];
+    let usable = true;
+    for (const col of columns) {
+      const value = col === 'uuid' ? incomingUuid : values[col];
+      if (value === undefined || value === null) { usable = false; break; }
+      params.push(value);
+    }
+    if (!usable) continue;
+    const row = db()
+      .prepare(`SELECT id, uuid FROM ${spec.table} WHERE ${columns.map((c) => `${c} = ?`).join(' AND ')} LIMIT 1`)
+      .get(...params) as { id: number; uuid: string } | undefined;
+    if (row && String(row.uuid) !== incomingUuid) return { localId: Number(row.id) };
+  }
+  return null;
+}
+
+/**
+ * Mesma entidade, uuid diferente: a linha local adota o uuid da nuvem (a nuvem é a fonte
+ * da identidade — o uuid local é o que cada máquina inventou, então o que vale é o que já
+ * está publicado). O registro recebido só sobrescreve se for mais recente; se for mais
+ * antigo, a linha local vale e será empurrada no próximo push.
+ */
+function reconcileNaturalKey(
+  req: Request,
+  spec: RegisteredSyncTable,
+  localId: number,
+  rec: IncomingRecord,
+): number {
+  const local = getRowById(spec.table, localId);
+  if (!local) throw new Error(`Linha ${spec.table}#${localId} sumiu durante a reconciliação.`);
+  const localUpdatedAt = String(local.updated_at ?? '');
+  if (rec.updatedAt < localUpdatedAt) {
+    audit(req, 'sync.reconcile_ignored', spec.table, localId, null, {
+      uuid: rec.uuid, motivo: 'registro recebido é mais antigo que a linha local',
+    });
+    return localId;
+  }
+  const values = payloadToRowValues(spec, rec.payload);
+  const cols = Object.keys(values);
+  const sets = cols
+    .map((c) => `${c} = ?`)
+    .concat(['uuid = ?', 'updated_at = ?', 'deleted_at = ?', 'synced_at = ?', 'origin_machine = ?'])
+    .join(', ');
+  db()
+    .prepare(`UPDATE ${spec.table} SET ${sets} WHERE id = ?`)
+    .run(...cols.map((c) => values[c]), rec.uuid, rec.updatedAt, rec.deletedAt, nowIso(), rec.originMachine, localId);
+  applyChildren(spec, localId, rec.payload);
+  audit(req, 'sync.reconcile_uuid', spec.table, localId, { uuid: String(local.uuid ?? '') }, { uuid: rec.uuid });
+  return localId;
+}
+
+function insertNewRow(req: Request, spec: RegisteredSyncTable, rec: IncomingRecord): number {
   const values = { ...placeholdersForExcluded(spec), ...payloadToRowValues(spec, rec.payload) };
   const cols = Object.keys(values);
   const isLedgerTable = isLedger(spec);
   const controlCols = isLedgerTable ? ['uuid', 'synced_at', 'origin_machine'] : ['uuid', 'updated_at', 'deleted_at', 'synced_at', 'origin_machine'];
   const allCols = [...cols, ...controlCols];
-  const info = db()
-    .prepare(`INSERT INTO ${spec.table} (${allCols.join(', ')}) VALUES (${allCols.map(() => '?').join(', ')})`)
-    .run(
-      ...cols.map((c) => values[c]),
-      rec.uuid,
-      ...(isLedgerTable ? [] : [rec.updatedAt, rec.deletedAt]),
-      nowIso(),
-      rec.originMachine,
-    );
-  const localId = Number(info.lastInsertRowid);
+  let localId: number;
+  try {
+    const info = db()
+      .prepare(`INSERT INTO ${spec.table} (${allCols.join(', ')}) VALUES (${allCols.map(() => '?').join(', ')})`)
+      .run(
+        ...cols.map((c) => values[c]),
+        rec.uuid,
+        ...(isLedgerTable ? [] : [rec.updatedAt, rec.deletedAt]),
+        nowIso(),
+        rec.originMachine,
+      );
+    localId = Number(info.lastInsertRowid);
+  } catch (e) {
+    // Ledger é append-only por uuid: conflito ali é dado corrompido, não reconciliação.
+    if (!isLedgerTable && isUniqueViolation(e)) {
+      const conflict = findNaturalKeyConflict(spec, values, rec.uuid);
+      if (conflict) return reconcileNaturalKey(req, spec, conflict.localId, rec);
+    }
+    throw e;
+  }
   if (!isLedgerTable) applyChildren(spec, localId, rec.payload);
   return localId;
 }
@@ -260,7 +364,7 @@ function applyIncomingRecord(req: Request, spec: RegisteredSyncTable, rec: Incom
   if (isLedger(spec)) {
     const existing = getRowByUuid(spec.table, rec.uuid);
     if (existing) return null; // append-only: já aplicado
-    const localId = insertNewRow(spec, rec);
+    const localId = insertNewRow(req, spec, rec);
     const hook = getRecomputeHook(spec.table);
     if (hook) {
       const inserted = getRowById(spec.table, localId)!;
@@ -271,7 +375,7 @@ function applyIncomingRecord(req: Request, spec: RegisteredSyncTable, rec: Incom
     return localId;
   }
   const local = getRowByUuid(spec.table, rec.uuid);
-  if (!local) return insertNewRow(spec, rec);
+  if (!local) return insertNewRow(req, spec, rec);
   updateRow(req, spec, local, rec);
   return Number(local.id);
 }
@@ -280,7 +384,7 @@ async function applyIncomingBatch(req: Request, records: IncomingRecord[]): Prom
   const byEntityType = new Map(getSyncTables().map((s) => [s.entityType, s]));
   const pending: PendingRecompute = new Map();
   let queue = records;
-  const lastError = new Map<string, string>();
+  const lastError = new Map<string, { reason: string; foreignKey: boolean }>();
   for (let attempt = 0; attempt < 3 && queue.length; attempt++) {
     const next: IncomingRecord[] = [];
     for (const rec of queue) {
@@ -289,20 +393,28 @@ async function applyIncomingBatch(req: Request, records: IncomingRecord[]): Prom
       try {
         applyIncomingRecord(req, spec, rec, pending);
       } catch (e) {
-        if (e instanceof UnresolvedForeignKeyError) {
-          next.push(rec);
-          lastError.set(rec.uuid, e.message);
-        } else {
-          throw e;
-        }
+        /**
+         * Um registro problemático NÃO pode derrubar o lote inteiro. Antes disto, uma
+         * exceção que não fosse FK fora de ordem (ex.: `UNIQUE constraint failed:
+         * capabilities.key`) subia até `runSync` e abortava o pull por completo — numa
+         * loja real isso significou 4.422 ciclos sem aplicar NADA vindo da nuvem.
+         * Retenta dentro do lote (FK fora de ordem se resolve na rodada seguinte) e, se
+         * persistir, audita e segue: o registro volta na próxima mudança.
+         */
+        next.push(rec);
+        lastError.set(rec.uuid, {
+          reason: e instanceof Error ? e.message : String(e),
+          foreignKey: e instanceof UnresolvedForeignKeyError,
+        });
       }
     }
     queue = next;
   }
   for (const rec of queue) {
-    audit(req, 'sync.unresolved_fk', rec.entityType, undefined, null, {
+    const info = lastError.get(rec.uuid);
+    audit(req, info?.foreignKey ? 'sync.unresolved_fk' : 'sync.apply_failed', rec.entityType, undefined, null, {
       uuid: rec.uuid,
-      reason: lastError.get(rec.uuid),
+      reason: info?.reason,
     });
   }
   for (const [table, ids] of pending) {

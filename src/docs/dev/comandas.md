@@ -92,14 +92,18 @@ mesa. Pagamento, desconto e cliente seguem as regras de `vendas.md`.
 O QR impresso é fixo (o token fica em `store_tables.qr_token`); para não depender de trocar
 o código colado na mesa, a presença é confirmada pelo atendente:
 
-- por padrão (`pedido_qr.exigir_mesa_aberta = 1`), o pedido só entra se a mesa já tiver uma
-  comanda aberta pelo atendente. Quem está em casa com o link salvo não consegue abrir uma
-  mesa livre;
+- por padrão (`pedido_qr.exigir_mesa_aberta = 0`, `pedido_qr.abrir_mesa_auto = 1`), a primeira
+  rodada do QR abre a comanda/mesa sozinha — o pedido entra **pendente** e o garçom confirma
+  antes de ir para a cozinha;
+- ligando `pedido_qr.exigir_mesa_aberta` (ou desligando `abrir_mesa_auto`), o pedido só entra se
+  a mesa já tiver uma comanda aberta pelo atendente. Quem está em casa com o link salvo não
+  consegue abrir uma mesa livre — mas o cliente recebe "chame o atendente" no celular e nada
+  aparece no salão, então o padrão antigo (as duas opções ligadas, contraditórias) foi removido;
 - o garçom continua confirmando cada rodada antes de ela ir para a cozinha;
 - o Cloud limita a 8 pedidos por 10 minutos por token+IP e a 2 rodadas pendentes por mesa,
-  para um link vazado não inundar a tela do atendente;
-- desligar a opção em **Configurações → Mesas e balcão** volta ao fluxo antigo (o QR abre a
-  mesa sozinho).
+  para um link vazado não inundar a tela do atendente. Pedido cujo comando terminou em erro
+  (mesa fechada, item saiu do cardápio) **não** ocupa essa vaga;
+- desligar a exigência em **Configurações → Mesas e balcão** mantém o QR abrindo a mesa sozinho.
 
 O QR só é gerado quando a capability `comandas.pedido_qr` está ativa, o plano é Diamante ou
 Trial, a licença está válida e o Cloud está configurado. O Cloud guarda só o SHA-256 do

@@ -30,7 +30,11 @@
             desabilitado em vez de reenviar a comanda inteira para a cozinha. %>
         <button type="button" class="btn secondary" @click="enviarCozinha()"
                 :disabled="enviandoCozinha || kitchenPendingCount() === 0"
-                :title="kitchenPendingCount() ? 'Enviar ' + kitchenPendingCount() + ' item(ns) novo(s) para o painel da cozinha' : 'Nenhum item novo da cozinha para enviar'">
+                :title="kitchenPendingCount()
+                  ? 'Enviar ' + kitchenPendingCount() + ' item(ns) novo(s) para o painel da cozinha'
+                  : (items.length && !items.some((i) => i.goes_to_kitchen)
+                    ? 'Nenhum produto desta comanda está no roteamento da cozinha'
+                    : 'Nenhum item novo da cozinha para enviar')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
           <span class="btn-label" x-text="kitchenButtonLabel()"></span>
         </button>
@@ -66,6 +70,17 @@
         <button type="button" class="btn secondary" @click="rejectQr()">Recusar</button>
         <button type="button" class="btn" @click="confirmQr()">Confirmar e enviar p/ cozinha</button>
       </div>
+    </div>
+
+    <%# Aviso de roteamento: item fora do roteamento da cozinha não gera ticket. Antes isso
+        era silencioso e o pedido "chegava faltando" sem ninguém saber o motivo. %>
+    <div class="comanda-aviso-cozinha" x-show="itensSemRoteamento().length" x-cloak>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <span>
+        <strong x-text="itensSemRoteamento().length === 1 ? '1 item não vai para a cozinha' : itensSemRoteamento().length + ' itens não vão para a cozinha'"></strong>:
+        <span x-text="itensSemRoteamento().map((i) => i.product_name).join(', ')"></span>.
+        Esses produtos não estão no roteamento — ajuste em <strong>Cozinha → Enviar para a cozinha</strong> se eles devem ser produzidos.
+      </span>
     </div>
 
     <div class="panel comanda-panel">
@@ -696,6 +711,16 @@
     .comanda-qr-pending-text { display: grid; gap: .1rem; font-size: .86rem; }
     .comanda-qr-pending-text strong { color: var(--primary); }
     .comanda-qr-pending .toolbar { margin: 0; flex-wrap: wrap; }
+    /* Produto fora do roteamento da cozinha: não gera ticket, então o aviso é a única
+       forma de o garçom descobrir que aquele item não será produzido. */
+    .comanda-aviso-cozinha {
+      display: flex; align-items: flex-start; gap: .5rem;
+      margin: .75rem 0; padding: .6rem .85rem;
+      border: 1.5px solid var(--warning-text); border-radius: var(--radius);
+      background: color-mix(in srgb, var(--warning-bg) 70%, var(--surface));
+      color: var(--warning-text); font-size: .82rem;
+    }
+    .comanda-aviso-cozinha svg { flex: none; margin-top: .12rem; }
     .kitchen-tag.qr-tag {
       background: color-mix(in srgb, var(--primary) 16%, transparent);
       color: var(--primary); font-weight: 700;
@@ -805,7 +830,14 @@
           if (this.enviandoCozinha) return 'Enviando…';
           const pending = this.kitchenPendingCount();
           if (pending > 0) return 'Enviar p/ cozinha (' + pending + ')';
-          return this.items.some((i) => i.goes_to_kitchen) ? 'Cozinha em dia' : 'Enviar p/ cozinha';
+          if (!this.items.some((i) => i.goes_to_kitchen)) return 'Sem itens p/ cozinha';
+          return 'Cozinha em dia';
+        },
+        // Itens "principais" cujo produto não está no roteamento da cozinha: eles não
+        // geram ticket nenhum. Complemento (granola, leite) não conta — ele viaja junto
+        // com o principal, então nunca teria roteamento próprio.
+        itensSemRoteamento() {
+          return this.items.filter((i, idx) => !i.goes_to_kitchen && !this.isComplement(idx));
         },
         qrPendingSummary() {
           const items = this.qrPending.reduce((n, o) => n + Number(o.items_count || 0), 0);
@@ -826,6 +858,17 @@
               return;
             }
             showToast('Pedido do cliente confirmado e enviado para a cozinha.', 'success');
+            // O pedido pode ter itens que a cozinha não produz (fora do roteamento).
+            // Dizer "confirmado" sem isso faz o garçom achar que a cozinha recebeu tudo.
+            const unrouted = Array.isArray(d.unrouted) ? d.unrouted : [];
+            if (unrouted.length) {
+              showToast(
+                'Atenção: ' + (unrouted.length === 1 ? '1 item NÃO vai' : unrouted.length + ' itens NÃO vão') +
+                ' para a cozinha — ' + unrouted.map((i) => i.name).join(', ') +
+                '. Ajuste o roteamento se devem ser produzidos.',
+                'error',
+              );
+            }
             await this.load();
           } catch {
             showToast('Sem conexão com o servidor local.', 'error');
@@ -1200,15 +1243,28 @@
               showToast((b && b.error) || 'Não foi possível enviar para a cozinha.', 'error');
               return;
             }
-            // Envelope global: { success, data: { sent, estimatedMinutes } }
+            // Envelope global: { success, data: { sent, estimatedMinutes, unrouted } }
             const body = await r.json().catch(() => null);
             const sent = Number(body?.data?.sent ?? 0);
             const min = Number(body?.data?.estimatedMinutes ?? 0);
+            const unrouted = Array.isArray(body?.data?.unrouted) ? body.data.unrouted : [];
             if (sent > 0) {
               const itens = sent === 1 ? '1 item enviado para a cozinha' : `${sent} itens enviados para a cozinha`;
               showToast(min > 0 ? `${itens} — pronto em ~${min} min.` : `${itens}.`, 'success');
+            } else if (unrouted.length) {
+              showToast('Nada foi para a cozinha: nenhum item desta comanda está no roteamento.', 'error');
             } else {
               showToast('Nada novo para a cozinha — itens já enviados ou que não são da cozinha.', 'info');
+            }
+            // Item fora do roteamento não gera ticket. Avisar (com nome) evita o clássico
+            // "o pedido chegou faltando na cozinha" sem ninguém saber por quê.
+            if (unrouted.length) {
+              const nomes = unrouted.map((i) => i.name).join(', ');
+              showToast(
+                (unrouted.length === 1 ? '1 item NÃO foi para a cozinha: ' : unrouted.length + ' itens NÃO foram para a cozinha: ') +
+                nomes + '. Ajuste o roteamento em Cozinha → Enviar para a cozinha.',
+                'error',
+              );
             }
             // Sem recarregar, os selos continuariam "a enviar" até o próximo poll.
             await this.load().catch(() => {});

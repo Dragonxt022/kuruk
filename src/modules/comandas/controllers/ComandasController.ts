@@ -367,7 +367,9 @@ export const comandasController = {
     const orderUuid = req.body?.orderUuid ? String(req.body.orderUuid) : undefined;
     const result = confirmQrOrders(req, Number(req.params.id), orderUuid);
     if (!result.ok) { res.status(400).json(result); return; }
-    res.json({ sent: result.sent, orders: result.orders });
+    // `unrouted`: itens do pedido que não estão no roteamento da cozinha. A tela avisa
+    // o garçom em vez de dizer "confirmado" para um pedido que chegou incompleto lá.
+    res.json({ sent: result.sent, orders: result.orders, unrouted: result.unrouted });
   },
 
   /** Garçom recusou (brincadeira/criança/item em falta): anula a rodada e avisa o celular. */
@@ -393,7 +395,8 @@ export const comandasController = {
     if (!result.ok) { res.status(400).json(result); return; }
     // Sem a chave 'ok': o envelope de resposta colapsaria {ok,...} num escalar
     // solto; assim chega como data.{sent,estimatedMinutes}, forma estável.
-    res.json({ sent: result.sent, estimatedMinutes: result.estimatedMinutes });
+    // `unrouted` viaja junto para a tela avisar o que NÃO foi para a cozinha.
+    res.json({ sent: result.sent, estimatedMinutes: result.estimatedMinutes, unrouted: result.unrouted });
   },
 
   transferAction(req: Request, res: Response) {

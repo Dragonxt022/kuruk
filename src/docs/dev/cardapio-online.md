@@ -85,13 +85,17 @@ mais pedir. A URL pública é `${cloud}/pedido/${token}` e o QR é renderizado n
 
 ## Mesa aberta e antiabuso
 
-- `pedido_qr.exigir_mesa_aberta` (padrão **ligado**): o QR só aceita pedido se a mesa já
-  tiver uma comanda aberta pelo atendente. Sem isso, alguém de fora com o link salvo
-  conseguiria abrir uma mesa livre. A mensagem orienta o cliente a chamar o atendente.
-- `pedido_qr.abrir_mesa_auto` (legado, padrão ligado): usado apenas quando a exigência
-  acima está desligada; permite que o QR abra a mesa sozinho.
+- `pedido_qr.exigir_mesa_aberta` (padrão **desligado**): ligada, o QR só aceita pedido se a
+  mesa já tiver uma comanda aberta pelo atendente. Sem isso, alguém de fora com o link salvo
+  conseguiria abrir uma mesa livre. A mensagem orienta o cliente a chamar o atendente — mas a
+  recusa só existe no celular dele, então este é o ajuste que mais gera "meu pedido sumiu"
+  quando o QR está colado em mesas que ninguém abriu.
+- `pedido_qr.abrir_mesa_auto` (padrão ligado): permite que o QR abra a mesa sozinho. É o fluxo
+  padrão; o que impede pedido indevido de chegar à cozinha é a confirmação do garçom.
 - O Cloud limita a **8 pedidos por 10 minutos** por token + IP e a **2 rodadas pendentes
   por mesa em 30 minutos**. A terceira rodada só entra depois de uma confirmação/recusa.
+  Rodada cujo comando terminou em **erro** no desktop não conta para esse limite (antes,
+  duas tentativas recusadas bloqueavam a mesa por 30 minutos).
 - Cada pedido aceita até 40 itens; quantidade por item é limitada a 20 e por complemento a
   10; o payload de complementos é limitado a 20 itens por linha.
 - Se a mesa estiver ocupada, um link vazado ainda consegue enviar até 2 rodadas; elas
@@ -151,12 +155,17 @@ Endpoints principais:
 - **Pedido pelo celular não está disponível nesta loja agora** — a publicação do cardápio
   está desligada (capability desligada, licença inválida ou app sem publicar).
 - **A mesa não está aberta** — a regra `exigir_mesa_aberta` está ligada e não há comanda
-  aberta; o atendente precisa abrir a mesa. O status `ocupada` da mesa não é consultado
-  aqui: uma mesa marcada como ocupada **sem** comanda aberta é tratada como livre.
+  aberta; o atendente precisa abrir a mesa. Por padrão a regra vem **desligada** (o QR abre
+  a mesa e o garçom confirma a rodada); a recusa só aparece no celular do cliente, então
+  ligar esta opção exige alguém no salão abrindo mesa. O status `ocupada` da mesa não é
+  consultado aqui: uma mesa marcada como ocupada **sem** comanda aberta é tratada como livre.
 - **Item não está mais disponível** — o cardápio mudou entre a montagem e o envio; o
   cliente deve atualizar a página e remontar o pedido.
 - **Já existem pedidos desta mesa aguardando o atendente** — limite de 2 rodadas pendentes;
-  aguarde a confirmação/recusa.
+  aguarde a confirmação/recusa. Rodada que o desktop recusou por erro não conta.
+- **Pedido chegou à cozinha faltando item** — o produto está fora do roteamento da cozinha
+  (`Cozinha → Enviar para a cozinha`). Desde a versão que acompanha esta correção, o garçom
+  vê um aviso com o nome do item em vez do "enviado com sucesso" silencioso.
 
 ## Arquivos-chave
 

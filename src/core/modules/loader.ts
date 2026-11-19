@@ -95,14 +95,16 @@ export function registerCapabilities(m: ModuleManifest): void {
   if (!m.capabilities?.length) return;
   const db = getSqlite();
   // `capabilities` é replicada pelo sync entre máquinas: o uuid tem de ser o mesmo em
-  // toda instalação (identidade estável por key), senão cada máquina gera um uuid
-  // diferente e o sync estoura o UNIQUE de `key`. Reconciliado a cada boot, inclusive
-  // em instalações criadas antes desta regra (uuid aleatório → determinístico).
+  // toda instalação (identidade estável por key), senão o sync estoura o UNIQUE de `key`.
+  // O uuid determinístico é semeado apenas na CRIAÇÃO da linha. Reescrever o uuid de uma
+  // linha que já existe é o que quebrava o sync: a nuvem podia ter outro uuid para a mesma
+  // capability (instalação antiga, com uuid aleatório) e todo boot do app revertia o uuid
+  // local para o determinístico — assim o pull nunca convergia e falhava em todo ciclo.
+  // A identidade de uma linha já publicada pertence à nuvem (ver `reconcileNaturalKey`).
   const upsert = db.prepare(
     `INSERT INTO capabilities (key, description, module, enabled, beta, uuid) VALUES (?, ?, ?, 0, ?, ?)
      ON CONFLICT(key) DO UPDATE SET
-       description = excluded.description, module = excluded.module, beta = excluded.beta,
-       uuid = excluded.uuid`,
+       description = excluded.description, module = excluded.module, beta = excluded.beta`,
   );
   for (const cap of m.capabilities) {
     upsert.run(cap.key, cap.description, m.id, cap.beta ? 1 : 0, stableUuid(`capability:${cap.key}`));

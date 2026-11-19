@@ -471,12 +471,14 @@
         <div class="field">
           <label class="label-checkbox">
             <input type="checkbox" x-model="comandas.exigirMesaAberta" />
-            Aceitar pedido pelo QR somente com a mesa aberta pelo atendente
+            Exigir que o atendente abra a mesa antes de aceitar pedido pelo QR
           </label>
           <p class="hint mt-0" style="margin-top:.35rem">
-            Recomendado. Sem isso, qualquer pessoa com o link do QR consegue mandar pedido
-            para uma mesa livre, mesmo estando fora da loja. O atendente abre a mesa ao
-            receber os clientes e o pedido do celular continua dependendo da confirmação dele.
+            Desligado (padrão), o primeiro pedido do QR abre a mesa sozinho — e o garçom
+            continua confirmando cada rodada antes de a cozinha receber. Ligado, o pedido
+            é recusado enquanto a mesa estiver fechada e o cliente precisa chamar o
+            atendente (a recusa só aparece no celular dele). Com o QR já impresso nas
+            mesas, deixar ligado é a causa mais comum de "meu pedido não foi".
           </p>
         </div>
         <% if (user.permissions.has('settings.edit')) { %>
@@ -1971,7 +1973,7 @@
         },
         productTypes: [], savingProductTypes: false, productTypesSaved: '',
         sales: { exibirCupom: true, lembreteCaixa24h: true, pdvSom: true, pdvImprimirAuto: false, pdvCozinhaAuto: false, pdvDescontoMotivo: false, pdvDescontoMax: '0', pdvParcelasMax: 12 }, savingSales: false, salesSaved: '',
-        comandas: { rotulo: 'mesa', exigirMesaAberta: true }, savingComandas: false, comandasSaved: '',
+        comandas: { rotulo: 'mesa', exigirMesaAberta: false }, savingComandas: false, comandasSaved: '',
         financeiro: { multaAtiva: false, multaPercentual: '2,00', jurosAtivo: false, jurosPercentualDia: '0,033' },
         savingFinanceiro: false, financeiroSaved: '',
         empresa: { nome: '', razaoSocial: '', documento: '', ie: '', email: '', telefone: '', endereco: '' }, savingEmpresa: false, empresaSaved: '',
@@ -2088,8 +2090,10 @@
           this.sales.pdvDescontoMax = this.settings.find(s => s.key === 'pdv.desconto_maximo_percentual')?.value ?? '0';
           this.sales.pdvParcelasMax = Number(this.settings.find(s => s.key === 'pdv.parcelas_max')?.value ?? 12);
           this.comandas.rotulo = this.settings.find(s => s.key === 'comandas.rotulo')?.value === 'balcao' ? 'balcao' : 'mesa';
-          // Padrão LIGADO: sem valor salvo, o QR só aceita pedido com a mesa aberta.
-          this.comandas.exigirMesaAberta = this.settings.find(s => s.key === 'pedido_qr.exigir_mesa_aberta')?.value !== '0';
+          // Padrão DESLIGADO: o pedido do QR abre a mesa sozinho (fluxo que funciona sem
+          // treinar o salão). Ligado, o pedido é recusado enquanto o garçom não abrir a
+          // mesa — e a recusa só aparece no celular do cliente.
+          this.comandas.exigirMesaAberta = this.settings.find(s => s.key === 'pedido_qr.exigir_mesa_aberta')?.value === '1';
           this.financeiro.multaAtiva = this.settings.find(s => s.key === 'financeiro.multa_atraso.ativa')?.value === '1';
           const multaPct = this.settings.find(s => s.key === 'financeiro.multa_atraso.percentual')?.value;
           this.financeiro.multaPercentual = (multaPct != null ? Number(multaPct) : 2).toFixed(2).replace('.', ',');

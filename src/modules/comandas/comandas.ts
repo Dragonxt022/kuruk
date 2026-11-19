@@ -187,7 +187,13 @@ export function sendToKitchen(
   comandaId: number,
   serviceType: 'local' | 'viagem' | 'entrega' = 'local',
   itemIds?: number[],
-): { ok: true; sent: number; estimatedMinutes: number | null } | { ok: false; error: string } {
+): {
+  ok: true;
+  sent: number;
+  estimatedMinutes: number | null;
+  /** Itens que ficaram de fora porque o produto não está no roteamento da cozinha. */
+  unrouted: { name: string; qty: number }[];
+} | { ok: false; error: string } {
   assertAuth(req);
   const comanda = comandaRepository.findOpen(comandaId) as ComandaRow | undefined;
   if (!comanda) return { ok: false, error: 'Comanda nao encontrada.' };
@@ -209,16 +215,16 @@ export function sendToKitchen(
     ) as { id: number }[]).map((r) => Number(r.id)),
   );
   items = items.filter((i) => i.qrOrderId == null || !pendingQrOrders.has(Number(i.qrOrderId)));
-  if (!items.length) return { ok: true, sent: 0, estimatedMinutes: null };
+  if (!items.length) return { ok: true, sent: 0, estimatedMinutes: null, unrouted: [] };
 
-  if (!hasService('foodservice.kitchen')) return { ok: true, sent: 0, estimatedMinutes: null };
+  if (!hasService('foodservice.kitchen')) return { ok: true, sent: 0, estimatedMinutes: null, unrouted: [] };
   const kitchen = getService<FoodserviceKitchenService>('foodservice.kitchen');
   const alreadySent = new Set(kitchen.findSentComandaItemIds(items.map((i) => i.id)));
   // O principal leva os complementos do grupo no ticket — Granola/Leite não são produtos
   // roteados e, sem isso, a cozinha só via o Açaí.
   const enriched = attachComplements(items, (i) => i.productName ?? String(i.productId));
   const pending = enriched.filter((i) => !alreadySent.has(i.id));
-  if (!pending.length) return { ok: true, sent: 0, estimatedMinutes: null };
+  if (!pending.length) return { ok: true, sent: 0, estimatedMinutes: null, unrouted: [] };
 
   // "Viagem" por item. Se o chamador marcou o pedido inteiro como viagem (tela antiga
   // ou confirmação do QR), o fallback vale para itens sem flag gravada.
@@ -230,7 +236,7 @@ export function sendToKitchen(
   const tableLabel = comanda.table_id
     ? (storeTableRepository.findByComandaTableId(comanda.table_id) as { label: string } | undefined)?.label
     : undefined;
-  let result: { items: number; maxEstimatedMinutes: number | null };
+  let result: { items: number; maxEstimatedMinutes: number | null; unrouted: { name: string; qty: number }[] };
   try {
     result = kitchen.notifyOrder(req, {
       sourceType: 'comanda', sourceId: comandaId,
@@ -252,8 +258,9 @@ export function sendToKitchen(
   }
   audit(req, 'enviar_cozinha', 'comanda', comandaId, null, {
     itensEnviados: result.items, itensNoPedido: pending.length, minutosEstimados: result.maxEstimatedMinutes,
+    semRoteamento: result.unrouted.map((i) => i.name),
   });
-  return { ok: true, sent: result.items, estimatedMinutes: result.maxEstimatedMinutes };
+  return { ok: true, sent: result.items, estimatedMinutes: result.maxEstimatedMinutes, unrouted: result.unrouted };
 }
 
 /**

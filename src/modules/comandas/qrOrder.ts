@@ -215,11 +215,17 @@ export function receiveQrOrder(req: Request, payload: QrOrderPayload): ReceiveRe
   const resolved = resolveLines(payload.items);
   if (!resolved.ok) return resolved;
 
-  // Sem mudar o QR impresso, a presença é confirmada pelo atendente: o pedido só entra
-  // se a mesa já estiver aberta. Quem está em casa com o link salvo não consegue abrir
-  // a mesa; quando a mesa está ocupada, o garçom ainda confirma cada rodada.
-  // `abrir_mesa_auto` continua valendo para quem preferir o fluxo antigo.
-  const requireOpenTable = settingsRepository.getBool('pedido_qr.exigir_mesa_aberta', true);
+  // Sem mudar o QR impresso, a presença é confirmada pelo atendente. Duas configurações
+  // disputavam essa decisão e as duas vinham LIGADAS de fábrica, o que fazia o pedido de
+  // uma mesa recém-chegada ser recusado com "chame o atendente" — e ninguém no salão
+  // ficava sabendo, porque a recusa só existia no celular do cliente.
+  //
+  // Regra única (e explícita): o pedido abre a mesa quando `abrir_mesa_auto` está ligada
+  // E `exigir_mesa_aberta` está desligada. Quem quiser que só o garçom abra a mesa liga
+  // `exigir_mesa_aberta` (ou desliga `abrir_mesa_auto`). O padrão agora é o fluxo que
+  // funciona sem treinar ninguém: abre a mesa, o pedido entra PENDENTE e o garçom
+  // confirma antes de qualquer coisa ir para a cozinha.
+  const requireOpenTable = settingsRepository.getBool('pedido_qr.exigir_mesa_aberta', false);
   const autoOpen = settingsRepository.getBool('pedido_qr.abrir_mesa_auto', true);
   let comandaId: number;
   let createdComanda = false;
@@ -353,7 +359,12 @@ export function confirmQrOrders(
   req: Request,
   comandaId: number,
   orderUuid?: string,
-): { ok: true; sent: number; orders: number } | { ok: false; error: string } {
+): {
+  ok: true;
+  sent: number;
+  orders: number;
+  unrouted: { name: string; qty: number }[];
+} | { ok: false; error: string } {
   const comanda = comandaRepository.findOpen(comandaId);
   if (!comanda) return { ok: false, error: 'Comanda não encontrada.' };
   const orders = pendingOrders(comandaId, orderUuid);
@@ -361,6 +372,7 @@ export function confirmQrOrders(
 
   let sent = 0;
   let confirmed = 0;
+  const unrouted: { name: string; qty: number }[] = [];
   for (const order of orders) {
     const items = comandaItemRepository.raw(
       `SELECT id, para_viagem AS paraViagem FROM comanda_items
@@ -391,13 +403,16 @@ export function confirmQrOrders(
       return { ok: false, error: result.error };
     }
     sent += result.sent;
+    if (result.unrouted.length) unrouted.push(...result.unrouted);
     confirmed++;
     void notifyCloudStatus(req, order.order_uuid, 'confirmado');
   }
 
-  audit(req, 'confirmar_pedido_qr', 'comanda', comandaId, null, { orders: confirmed, itensEnviados: sent });
+  audit(req, 'confirmar_pedido_qr', 'comanda', comandaId, null, {
+    orders: confirmed, itensEnviados: sent, semRoteamento: unrouted.map((i) => i.name),
+  });
   notifyTableEvents();
-  return { ok: true, sent, orders: confirmed };
+  return { ok: true, sent, orders: confirmed, unrouted };
 }
 
 /** Garçom recusou (criança/brincadeira, item em falta): anula a rodada e avisa o celular. */
