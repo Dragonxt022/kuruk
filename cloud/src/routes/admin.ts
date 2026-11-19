@@ -4,6 +4,7 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import express, { Router } from 'express';
 import { getPool } from '../db';
 import { hashLicenseKey, requireCompanyAuth } from '../auth';
+import { encryptLicenseKey, decryptLicenseKey } from '../licenseKeyVault';
 import { emitToCompany } from '../events';
 import { planSelectorData, trialValidUntil } from '../plans';
 import {
@@ -82,6 +83,8 @@ interface CompanyRow {
   valid_until: string | null;
   max_devices: number;
   licensed_version: string | null;
+  /** Cópia cifrada da chave (ver licenseKeyVault.ts); ausente em empresas antigas. */
+  license_key_enc?: string | null;
 }
 
 async function loadCompanyDetail(companyUuid: string) {
@@ -830,10 +833,11 @@ router.post('/companies', requireAdminAuth, async (req: AdminRequest, res) => {
   const licenseKey = generateLicenseKey();
   const modulesList = parseModules(modules);
   await getPool().query(
-    'INSERT INTO companies (company_uuid, license_key_hash, name, plan, modules, valid_until, max_devices) VALUES (?, ?, ?, ?, CAST(? AS JSON), ?, ?)',
+    'INSERT INTO companies (company_uuid, license_key_hash, license_key_enc, name, plan, modules, valid_until, max_devices) VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)',
     [
       companyUuid,
       hashLicenseKey(licenseKey),
+      encryptLicenseKey(licenseKey),
       name || null,
       plan || null,
       modulesList.length ? JSON.stringify(modulesList) : null,
@@ -1273,10 +1277,45 @@ router.post('/companies/purge-expired-trials', requireAdminAuth, async (req: Adm
   ));
 });
 
+/**
+ * Revela a chave de licença atual da empresa para o atendente reenviar ao cliente.
+ *
+ * A cópia guardada é cifrada; o hash continua sendo a única forma de autenticar a
+ * licença. Empresas criadas antes do cofre (0059) ganham a cópia na próxima validação
+ * da licença (ver `requireCompanyAuth`); se ainda não houver cópia, a tela explica
+ * como resolver.
+ */
+router.post('/companies/:uuid/reveal-key', requireAdminAuth, async (req: AdminRequest, res) => {
+  const uuid = String(req.params.uuid);
+  const detail = await loadCompanyDetail(uuid);
+  if (!detail) {
+    res.status(404).send('Empresa não encontrada.');
+    return;
+  }
+  const stored = detail.company.license_key_enc ?? null;
+  const licenseKey = decryptLicenseKey(stored);
+  if (licenseKey) {
+    console.log(`[admin] chave de licença revelada para ${uuid} por ${req.adminUsername ?? '?'}`);
+  }
+  const plans = planSelectorData();
+  res.render('company-detail', {
+    ...detail,
+    revealedLicenseKey: licenseKey,
+    revealError: licenseKey
+      ? null
+      : 'Esta empresa ainda não tem uma cópia recuperável da chave. Ela é guardada automaticamente na próxima validação da licença pelo cliente (basta abrir o Kuruk conectado). Se ele não tiver mais a chave, gere uma nova.',
+    planTiers: plans.planTiers,
+    planLabels: plans.planLabels,
+  });
+});
+
 router.post('/companies/:uuid/rotate-key', requireAdminAuth, async (req, res) => {
   const uuid = String(req.params.uuid);
   const licenseKey = generateLicenseKey();
-  await getPool().query('UPDATE companies SET license_key_hash = ? WHERE company_uuid = ?', [hashLicenseKey(licenseKey), uuid]);
+  await getPool().query(
+    'UPDATE companies SET license_key_hash = ?, license_key_enc = ? WHERE company_uuid = ?',
+    [hashLicenseKey(licenseKey), encryptLicenseKey(licenseKey), uuid],
+  );
   const detail = await loadCompanyDetail(uuid);
   if (!detail) {
     res.status(404).send('Empresa não encontrada.');

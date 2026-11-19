@@ -36,10 +36,18 @@
         <% if (typeof ok !== 'undefined' && ok) { %><p class="success-banner"><%= ok %></p><% } %>
         <% if (typeof error !== 'undefined' && error) { %><p class="error-banner"><%= error %></p><% } %>
 
+        <% if (typeof revealError !== 'undefined' && revealError) { %>
+          <p class="error-banner"><%= revealError %></p>
+        <% } %>
+
         <% if (typeof revealedLicenseKey !== 'undefined' && revealedLicenseKey) { %>
           <div class="key-reveal">
-            <strong>Chave de licença (mostrada uma única vez — copie agora):</strong><br>
-            <code><%= revealedLicenseKey %></code>
+            <strong>Chave de licença desta empresa:</strong>
+            <span class="cell-muted">envie ao cliente por um canal seguro.</span>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
+              <code id="license-key-value"><%= revealedLicenseKey %></code>
+              <button type="button" class="btn secondary small" onclick="copyLicenseKey(this)">Copiar</button>
+            </div>
           </div>
         <% } %>
 
@@ -232,10 +240,21 @@
           <div class="card">
             <h2>Chave de licença</h2>
             <p class="field-hint" style="margin-top:0">
-              A chave só aparece uma vez, no momento em que é gerada — o servidor guarda apenas o hash dela.
-              Se o cliente perdeu a chave, gere outra.
+              A chave fica guardada de forma <strong>cifrada</strong> no servidor e pode ser revelada
+              aqui sempre que o cliente precisar. A autenticação continua usando só o hash.
             </p>
-            <button type="button" class="btn danger" onclick="window.document.getElementById('modal-rotate-key').showModal()">Gerar nova chave de licença</button>
+            <div class="form-actions-bar" style="border-top:none;padding-top:0;margin-top:12px">
+              <form method="post" action="/admin/companies/<%= company.company_uuid %>/reveal-key#licenca" style="margin:0">
+                <button type="submit" class="btn secondary">Revelar chave</button>
+              </form>
+              <div class="spacer"></div>
+              <button type="button" class="btn danger" onclick="window.document.getElementById('modal-rotate-key').showModal()">Gerar nova chave de licença</button>
+            </div>
+            <p class="field-hint" style="margin-bottom:0">
+              Empresas criadas antes deste recurso passam a ter a cópia cifrada na próxima vez que o
+              cliente abrir o Kuruk conectado. Se ele perdeu a chave, gere uma nova — a anterior deixa
+              de funcionar imediatamente.
+            </p>
           </div>
 
           <%# Resgate de senha do Kuruk local. O lojista liga, dita o código que aparece na
@@ -784,7 +803,7 @@
   </dialog>
 
   <dialog id="modal-rotate-key">
-    <form method="post" action="/admin/companies/<%= company.company_uuid %>/rotate-key">
+    <form method="post" action="/admin/companies/<%= company.company_uuid %>/rotate-key#licenca">
       <div class="modal-header">
         <h2>Gerar nova chave?</h2>
         <button type="button" class="modal-close" onclick="window.document.getElementById('modal-rotate-key').close()">&times;</button>
@@ -946,6 +965,25 @@
         texto += ' Quando paga, gera <strong>' + brl(liquido * AFF_COMMISSION_PCT / 100) + '</strong> de comissão (' + AFF_COMMISSION_PCT + '%).';
       }
       hint.innerHTML = texto;
+    }
+
+    /** Copia a chave revelada sem exigir seleção manual (o atendente dita no telefone). */
+    function copyLicenseKey(btn) {
+      var el = window.document.getElementById('license-key-value');
+      if (!el) return;
+      var text = el.textContent.trim();
+      var ok = function () {
+        if (btn && btn.tagName === 'BUTTON') {
+          var old = btn.textContent;
+          btn.textContent = 'Copiado!';
+          setTimeout(function () { btn.textContent = old; }, 1500);
+        }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok).catch(function () { window.prompt('Copie a chave:', text); });
+      } else {
+        window.prompt('Copie a chave:', text);
+      }
     }
 
     (function () {

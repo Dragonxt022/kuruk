@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { getPool } from './db';
+import { encryptLicenseKey } from './licenseKeyVault';
 import { canSaveToCloud } from './plans';
 
 export function hashLicenseKey(key: string): string {
@@ -26,10 +27,10 @@ export async function requireCompanyAuth(req: AuthedRequest, res: Response, next
     });
     return;
   }
-  const [rows] = await getPool().query('SELECT license_key_hash, plan FROM companies WHERE company_uuid = ?', [
+  const [rows] = await getPool().query('SELECT license_key_hash, plan, license_key_enc FROM companies WHERE company_uuid = ?', [
     companyUuid,
   ]);
-  const company = (rows as { license_key_hash: string; plan: string | null }[])[0];
+  const company = (rows as { license_key_hash: string; plan: string | null; license_key_enc?: string | null }[])[0];
   // Empresa inexistente = foi excluída (ou nunca existiu) no painel cloud. É diferente de
   // chave errada: o `code` deixa o desktop explicar ao lojista em vez de só "credenciais
   // inválidas". Aqui, empresa some → 404; chave não confere → 401.
@@ -43,6 +44,19 @@ export async function requireCompanyAuth(req: AuthedRequest, res: Response, next
   if (company.license_key_hash !== hashLicenseKey(licenseKey)) {
     res.status(401).json({ error: 'Credenciais inválidas.', code: 'invalid_credentials' });
     return;
+  }
+  // Empresa criada antes do cofre (migration 0059): a próxima validação com a chave
+  // correta é a oportunidade de guardar a cópia cifrada. Não bloqueia a requisição nem
+  // falha a autenticação se a coluna ainda não existir (deploy sem migration).
+  if (!company.license_key_enc) {
+    try {
+      await getPool().query(
+        "UPDATE companies SET license_key_enc = ? WHERE company_uuid = ? AND (license_key_enc IS NULL OR license_key_enc = '')",
+        [encryptLicenseKey(licenseKey), companyUuid],
+      );
+    } catch {
+      // Sem a coluna: segue autenticando normalmente; o painel avisa que não há cópia.
+    }
   }
   req.companyUuid = companyUuid;
   req.companyPlan = company.plan;

@@ -2,6 +2,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { getPool } from '../db';
 import { requireCompanyAuth, hashLicenseKey, type AuthedRequest } from '../auth';
+import { encryptLicenseKey } from '../licenseKeyVault';
 import { commercialPlan, planFeaturesFor, trialValidUntil } from '../plans';
 
 const router = Router();
@@ -114,11 +115,12 @@ router.post('/request-trial', async (req, res) => {
 
     await conn.query(
       `INSERT INTO companies
-         (company_uuid, license_key_hash, name, contact_name, phone, plan, valid_until, max_devices, recovery_secret)
-       VALUES (?, ?, ?, ?, ?, 'trial', ?, 1, ?)`,
+         (company_uuid, license_key_hash, license_key_enc, name, contact_name, phone, plan, valid_until, max_devices, recovery_secret)
+       VALUES (?, ?, ?, ?, ?, ?, 'trial', ?, 1, ?)`,
       [
         companyUuid,
         hashLicenseKey(licenseKey),
+        encryptLicenseKey(licenseKey),
         contactName,
         contactName,
         phone,

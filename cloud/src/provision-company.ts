@@ -9,6 +9,7 @@
  */
 import { getPool, closePool } from './db';
 import { hashLicenseKey } from './auth';
+import { encryptLicenseKey } from './licenseKeyVault';
 import { trialValidUntil } from './plans';
 
 function parseArgs(
@@ -44,14 +45,23 @@ async function main(): Promise<void> {
   }
   const finalValidUntil = validUntil ?? (plan === 'trial' ? trialValidUntil() : null);
   await getPool().query(
-    `INSERT INTO companies (company_uuid, license_key_hash, name, plan, modules, valid_until) VALUES (?, ?, ?, ?, CAST(? AS JSON), ?)
+    `INSERT INTO companies (company_uuid, license_key_hash, license_key_enc, name, plan, modules, valid_until) VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?)
      ON DUPLICATE KEY UPDATE
        license_key_hash = VALUES(license_key_hash),
+       license_key_enc = VALUES(license_key_enc),
        name = VALUES(name),
        plan = COALESCE(VALUES(plan), plan),
        modules = COALESCE(VALUES(modules), modules),
        valid_until = COALESCE(VALUES(valid_until), valid_until)`,
-    [companyUuid, hashLicenseKey(licenseKey), name ?? null, plan, modules ? JSON.stringify(modules) : null, finalValidUntil],
+    [
+      companyUuid,
+      hashLicenseKey(licenseKey),
+      encryptLicenseKey(licenseKey),
+      name ?? null,
+      plan,
+      modules ? JSON.stringify(modules) : null,
+      finalValidUntil,
+    ],
   );
   console.log(
     `Empresa provisionada: ${companyUuid}${plan ? ` (plano: ${plan})` : ''}${modules ? ` módulos: ${modules.join(', ')}` : ''}${finalValidUntil ? ` válida até: ${finalValidUntil}` : ''}`,
